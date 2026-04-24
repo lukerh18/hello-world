@@ -4,6 +4,7 @@ import { BottomNav } from './components/layout/BottomNav'
 import { Modal } from './components/shared/Modal'
 import { Button } from './components/shared/Button'
 import { Input } from './components/shared/Input'
+import { SettingsModal } from './components/shared/SettingsModal'
 import TodayPage from './pages/TodayPage'
 import WorkoutPage from './pages/WorkoutPage'
 import NutritionPage from './pages/NutritionPage'
@@ -39,6 +40,7 @@ export default function App() {
     localStorage.getItem('program_start_date')
   )
   const [showOnboarding, setShowOnboarding] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
 
   useEffect(() => {
     if (!startDate) setShowOnboarding(true)
@@ -54,7 +56,7 @@ export default function App() {
     <HashRouter>
       <div className="min-h-dvh bg-surface-900 pb-20">
         <Routes>
-          <Route path="/" element={<TodayPage />} />
+          <Route path="/" element={<TodayPage onOpenSettings={() => setShowSettings(true)} />} />
           <Route path="/workout" element={<WorkoutPage />} />
           <Route path="/nutrition" element={<NutritionPage />} />
           <Route path="/progress" element={<ProgressPage />} />
@@ -65,6 +67,7 @@ export default function App() {
       <Modal open={showOnboarding} onClose={() => {}} title="Welcome to FitTracker">
         <OnboardingModal onComplete={handleOnboard} />
       </Modal>
+      <SettingsModal open={showSettings} onClose={() => setShowSettings(false)} />
     </HashRouter>
   )
 }

@@ -4,11 +4,18 @@ import { MacroRing } from '../components/nutrition/MacroRing'
 import { MealCard } from '../components/nutrition/MealCard'
 import { AddFoodModal } from '../components/nutrition/AddFoodModal'
 import { NutritionSummary } from '../components/nutrition/NutritionSummary'
+import { MealSuggestions } from '../components/nutrition/MealSuggestions'
+import { ShoppingList } from '../components/nutrition/ShoppingList'
+import { PhotoAnalyzer } from '../components/nutrition/PhotoAnalyzer'
 import { Button } from '../components/shared/Button'
 import { useNutritionLog } from '../hooks/useNutritionLog'
+import { useSettings } from '../hooks/useSettings'
 import { NUTRITION_TARGETS } from '../data/userProfile'
-import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
+import { getMealsForDay } from '../data/mealPlan'
+import { ChevronLeftIcon, ChevronRightIcon, ShoppingCartIcon } from '@heroicons/react/24/outline'
 import type { FoodItem } from '../types'
+
+type MealId = 'breakfast' | 'lunch' | 'snack' | 'dinner'
 
 function formatDateDisplay(dateStr: string): string {
   const d = new Date(dateStr + 'T12:00:00')
@@ -22,16 +29,30 @@ function formatDateDisplay(dateStr: string): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
+function getDayOfWeek(dateStr: string): import('../types').DayOfWeek {
+  const days: import('../types').DayOfWeek[] = [
+    'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
+  ]
+  return days[new Date(dateStr + 'T12:00:00').getDay()]
+}
+
+type Tab = 'logged' | 'suggested'
+
 export default function NutritionPage() {
   const today = new Date().toISOString().split('T')[0]
   const [date, setDate] = useState(today)
   const [addFoodOpen, setAddFoodOpen] = useState(false)
-  const [activeMealId, setActiveMealId] = useState('')
+  const [activeMealId, setActiveMealId] = useState<string>('breakfast')
+  const [tab, setTab] = useState<Tab>('logged')
+  const [shoppingOpen, setShoppingOpen] = useState(false)
+  const [loggedMealIds, setLoggedMealIds] = useState<Set<string>>(new Set())
 
   const { getByDate, addFood, deleteFood, updateWater, getDayTotals } = useNutritionLog()
+  const { settings } = useSettings()
 
   const dayData = getByDate(date)
   const totals = getDayTotals(date)
+  const suggestedMeals = getMealsForDay(getDayOfWeek(date))
 
   const changeDate = (delta: number) => {
     const d = new Date(date + 'T12:00:00')
@@ -49,12 +70,42 @@ export default function NutritionPage() {
     setAddFoodOpen(true)
   }
 
+  const handleLogSuggestedMeal = (meal: import('../data/mealPlan').SuggestedMeal) => {
+    meal.items.forEach((item) => {
+      const food: FoodItem = {
+        id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
+        name: item.name,
+        calories: item.calories,
+        protein: item.protein,
+        carbs: item.carbs,
+        fat: item.fat,
+      }
+      addFood(date, meal.id, food)
+    })
+    setLoggedMealIds((prev) => new Set([...prev, meal.id + '_suggested']))
+  }
+
+  const handlePhotoFood = (food: Omit<FoodItem, 'id'>, mealId: MealId) => {
+    const fullFood: FoodItem = {
+      id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      ...food,
+    }
+    addFood(date, mealId, fullFood)
+  }
+
   return (
     <div className="px-4 pt-6 pb-4 max-w-lg mx-auto space-y-4">
-      {/* Date nav */}
+      {/* Date nav + shopping list */}
       <div className="flex items-center justify-between">
         <PageHeader title="Nutrition" />
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShoppingOpen(true)}
+            className="p-1.5 rounded-lg bg-surface-700 text-slate-400 hover:text-slate-200"
+            title="Weekly Shopping List"
+          >
+            <ShoppingCartIcon className="w-4 h-4" />
+          </button>
           <button onClick={() => changeDate(-1)} className="p-1.5 rounded-lg bg-surface-700 text-slate-400">
             <ChevronLeftIcon className="w-4 h-4" />
           </button>
@@ -120,23 +171,56 @@ export default function NutritionPage() {
         </div>
       </div>
 
-      {/* Meals */}
-      {dayData.meals.map((meal) => (
-        <MealCard
-          key={meal.id}
-          meal={meal}
-          onAddFood={() => openAddFood(meal.id)}
-          onDeleteFood={(foodId) => deleteFood(date, meal.id, foodId)}
-        />
-      ))}
+      {/* Tabs */}
+      <div className="flex bg-surface-800 rounded-xl p-1 border border-surface-700">
+        {(['logged', 'suggested'] as Tab[]).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`flex-1 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+              tab === t ? 'bg-accent text-white' : 'text-slate-400'
+            }`}
+          >
+            {t === 'logged' ? 'Logged' : 'Suggested'}
+          </button>
+        ))}
+      </div>
 
-      <Button
-        fullWidth
-        variant="ghost"
-        onClick={() => openAddFood(dayData.meals[0]?.id ?? '')}
-      >
-        + Add Food
-      </Button>
+      {tab === 'logged' ? (
+        <>
+          {/* Photo analyzer + Add Food row */}
+          <div className="flex items-center gap-2">
+            {settings.anthropicApiKey && (
+              <PhotoAnalyzer apiKey={settings.anthropicApiKey} onFoodParsed={handlePhotoFood} />
+            )}
+            <div className="flex-1">
+              <Button
+                fullWidth
+                variant="ghost"
+                onClick={() => openAddFood(dayData.meals[0]?.id ?? 'breakfast')}
+              >
+                + Add Food
+              </Button>
+            </div>
+          </div>
+
+          {/* Meal cards */}
+          {dayData.meals.map((meal) => (
+            <MealCard
+              key={meal.id}
+              meal={meal}
+              onAddFood={() => openAddFood(meal.id)}
+              onDeleteFood={(foodId) => deleteFood(date, meal.id, foodId)}
+            />
+          ))}
+        </>
+      ) : (
+        <MealSuggestions
+          meals={suggestedMeals}
+          onLogMeal={handleLogSuggestedMeal}
+          loggedMealIds={loggedMealIds}
+        />
+      )}
 
       <AddFoodModal
         open={addFoodOpen}
@@ -144,6 +228,8 @@ export default function NutritionPage() {
         meals={dayData.meals}
         onAdd={handleAddFood}
       />
+
+      <ShoppingList open={shoppingOpen} onClose={() => setShoppingOpen(false)} />
 
       {/* Daily targets reference */}
       <div className="bg-surface-700/40 rounded-2xl p-3 border border-surface-700">

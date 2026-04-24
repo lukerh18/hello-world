@@ -3,13 +3,15 @@ import { PhaseChip } from '../components/workout/PhaseChip'
 import { MacroRing } from '../components/nutrition/MacroRing'
 import { StatCard } from '../components/metrics/StatCard'
 import { Button } from '../components/shared/Button'
+import { CalendarWidget } from '../components/calendar/CalendarWidget'
 import { useCurrentWeek } from '../hooks/useCurrentWeek'
 import { useWorkoutLog } from '../hooks/useWorkoutLog'
 import { useNutritionLog } from '../hooks/useNutritionLog'
 import { useBodyMetrics } from '../hooks/useBodyMetrics'
+import { useSettings } from '../hooks/useSettings'
 import { getWorkoutForDay } from '../data/program'
 import { NUTRITION_TARGETS, DEFAULT_USER_PROFILE } from '../data/userProfile'
-import { ScaleIcon, FireIcon, CalendarIcon } from '@heroicons/react/24/outline'
+import { ScaleIcon, FireIcon, CalendarIcon, Cog6ToothIcon } from '@heroicons/react/24/outline'
 
 function getDayOfWeek(): import('../types').DayOfWeek {
   const days: import('../types').DayOfWeek[] = [
@@ -32,13 +34,18 @@ function daysUntil(dateStr: string): number {
   return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)))
 }
 
-export default function TodayPage() {
+interface TodayPageProps {
+  onOpenSettings?: () => void
+}
+
+export default function TodayPage({ onOpenSettings }: TodayPageProps) {
   const navigate = useNavigate()
   const startDate = localStorage.getItem('program_start_date') ?? new Date().toISOString().split('T')[0]
   const { week, phase } = useCurrentWeek(startDate)
   const { getTodayLog, getCompletedDates } = useWorkoutLog()
   const { getDayTotals } = useNutritionLog()
   const { latestWeight } = useBodyMetrics()
+  const { settings } = useSettings()
 
   const today = new Date().toISOString().split('T')[0]
   const todayLog = getTodayLog()
@@ -70,8 +77,20 @@ export default function TodayPage() {
     <div className="px-4 pt-6 pb-4 max-w-lg mx-auto space-y-5">
       {/* Header */}
       <div>
-        <p className="text-slate-500 text-sm">{dayName}, {dateStr}</p>
-        <h1 className="text-2xl font-bold text-slate-100 mt-0.5">{getGreeting()}, Luke 👋</h1>
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-slate-500 text-sm">{dayName}, {dateStr}</p>
+            <h1 className="text-2xl font-bold text-slate-100 mt-0.5">{getGreeting()}, Luke 👋</h1>
+          </div>
+          {onOpenSettings && (
+            <button
+              onClick={onOpenSettings}
+              className="p-2 rounded-xl bg-surface-800 border border-surface-700 text-slate-400 hover:text-slate-200 mt-1"
+            >
+              <Cog6ToothIcon className="w-5 h-5" />
+            </button>
+          )}
+        </div>
         <div className="mt-2">
           <PhaseChip phase={phase} week={week} />
         </div>
@@ -178,6 +197,15 @@ export default function TodayPage() {
           size={120}
         />
       </div>
+
+      {/* Google Calendar Widget */}
+      {settings.googleClientId && (
+        <CalendarWidget
+          clientId={settings.googleClientId}
+          todayWorkout={todayWorkout.isRest ? null : todayWorkout}
+          currentWeek={week}
+        />
+      )}
 
       {/* Warmup Reminder */}
       <div className="bg-surface-700/50 rounded-2xl p-3 border border-surface-700">
