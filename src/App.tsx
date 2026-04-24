@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { HashRouter, Routes, Route } from 'react-router-dom'
 import { BottomNav } from './components/layout/BottomNav'
 import { Modal } from './components/shared/Modal'
 import { Button } from './components/shared/Button'
@@ -51,7 +51,7 @@ export default function App() {
   }
 
   return (
-    <BrowserRouter>
+    <HashRouter>
       <div className="min-h-dvh bg-surface-900 pb-20">
         <Routes>
           <Route path="/" element={<TodayPage />} />
@@ -65,6 +65,6 @@ export default function App() {
       <Modal open={showOnboarding} onClose={() => {}} title="Welcome to FitTracker">
         <OnboardingModal onComplete={handleOnboard} />
       </Modal>
-    </BrowserRouter>
+    </HashRouter>
   )
 }
