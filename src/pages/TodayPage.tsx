@@ -119,7 +119,7 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
       <div className="flex items-start justify-between">
         <div>
           <p className="text-slate-500 text-sm">{dayName}, {dateStr}</p>
-          <h1 className="text-2xl font-bold text-slate-100 mt-0.5">{getGreeting()}, Luke</h1>
+          <h1 className="text-2xl font-bold text-gradient mt-0.5">{getGreeting()}, Luke</h1>
         </div>
         {onOpenSettings && (
           <button
@@ -134,7 +134,7 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
       {/* Phase + streak */}
       <div className="flex items-center gap-3 flex-wrap">
         <PhaseChip phase={phase} week={week} />
-        {streak > 0 && <span className="text-xs font-semibold text-warn">🔥 {streak}-day streak</span>}
+        {streak > 0 && <span className="text-xs font-semibold text-warn animate-streak-fire inline-block">🔥 {streak}-day streak</span>}
       </div>
 
       {/* Daily summary */}

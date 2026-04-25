@@ -1,4 +1,4 @@
-import { useReducer, useEffect, useCallback } from 'react'
+import { useReducer, useEffect, useCallback, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { PageHeader } from '../components/layout/PageHeader'
 import { WorkoutCard } from '../components/workout/WorkoutCard'
@@ -11,6 +11,7 @@ import { getWorkoutForDay } from '../data/program'
 import { getTargetWeight } from '../data/progressiveOverload'
 import type { ExerciseLog, WorkoutLog, DayOfWeek } from '../types'
 import { MoonIcon } from '@heroicons/react/24/outline'
+import { celebrateWorkout } from '../utils/celebrate'
 
 interface SessionState {
   exercises: ExerciseLog[]
@@ -96,6 +97,15 @@ export default function WorkoutPage() {
     0
   )
   const allDone = completedSets === totalSets && totalSets > 0
+  const celebratedRef = useRef(false)
+
+  // Fire once when all sets are completed
+  useEffect(() => {
+    if (allDone && !celebratedRef.current) {
+      celebratedRef.current = true
+      celebrateWorkout()
+    }
+  }, [allDone])
 
   const saveLog = useCallback(
     (completed: boolean) => {
