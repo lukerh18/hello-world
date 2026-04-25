@@ -13,7 +13,7 @@ import { useDailyAgenda } from '../hooks/useDailyAgenda'
 import { useDailySummary } from '../hooks/useDailySummary'
 import { getWorkoutForDay } from '../data/program'
 import { DEFAULT_USER_PROFILE, NUTRITION_TARGETS } from '../data/userProfile'
-import { MORNING_SUPPLEMENTS, EVENING_SUPPLEMENTS } from '../data/supplements'
+import { MORNING_SUPPLEMENTS, POST_WORKOUT_SUPPLEMENTS, EVENING_SUPPLEMENTS } from '../data/supplements'
 import { SLOT_TO_MEAL_ID } from '../data/mealLibrary'
 import type { MealPreset } from '../data/mealLibrary'
 import { ScaleIcon, FireIcon, CalendarIcon, Cog6ToothIcon } from '@heroicons/react/24/outline'
@@ -252,6 +252,7 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
         label="Afternoon"
         timeRange="12 PM – 6 PM"
         defaultExpanded={block === 'afternoon'}
+        supplements={todayWorkout.isRest ? [] : POST_WORKOUT_SUPPLEMENTS}
         mealSlots={[
           { id: 'lunch', label: 'Lunch', category: 'lunch' },
           { id: 'snack', label: 'Snack', category: 'snack', optional: true },

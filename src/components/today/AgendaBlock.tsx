@@ -94,7 +94,10 @@ export function AgendaBlock({
                   <span className={`text-sm flex-1 text-left ${done ? 'line-through text-slate-500' : 'text-slate-200'}`}>
                     {supp.name}
                   </span>
-                  <span className="text-xs text-slate-500">{supp.dose}</span>
+                  <div className="text-right">
+                    <p className="text-xs text-slate-500">{supp.dose}</p>
+                    {supp.note && <p className="text-[10px] text-slate-600">{supp.note}</p>}
+                  </div>
                 </button>
               )
             })}

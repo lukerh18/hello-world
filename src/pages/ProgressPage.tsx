@@ -12,8 +12,9 @@ import { useWorkoutLog } from '../hooks/useWorkoutLog'
 import { useCurrentWeek } from '../hooks/useCurrentWeek'
 import { DEFAULT_USER_PROFILE } from '../data/userProfile'
 import { OVERLOAD_EXERCISE_NAMES } from '../data/progressiveOverload'
+import { generateProgressExport } from '../utils/exportProgress'
 import type { OverloadKey } from '../types'
-import { ScaleIcon, ArrowTrendingUpIcon, TableCellsIcon } from '@heroicons/react/24/outline'
+import { ScaleIcon, ArrowTrendingUpIcon, TableCellsIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline'
 
 type Tab = 'weight' | 'strength' | 'measurements'
 
@@ -21,6 +22,9 @@ export default function ProgressPage() {
   const [tab, setTab] = useState<Tab>('weight')
   const [showWeightModal, setShowWeightModal] = useState(false)
   const [showMeasModal, setShowMeasModal] = useState(false)
+  const [showExportModal, setShowExportModal] = useState(false)
+  const [exportText, setExportText] = useState('')
+  const [copied, setCopied] = useState(false)
   const [newWeight, setNewWeight] = useState('')
   const [selectedExercise, setSelectedExercise] = useState<OverloadKey>('chest-press')
 
@@ -44,6 +48,20 @@ export default function ProgressPage() {
       }),
     }
   }).filter((d) => d.weight > 0)
+
+  const handleExport = () => {
+    const text = generateProgressExport()
+    setExportText(text)
+    setShowExportModal(true)
+    setCopied(false)
+  }
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(exportText).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
 
   const handleLogWeight = () => {
     if (!newWeight) return
@@ -236,12 +254,39 @@ export default function ProgressPage() {
         </div>
       </Modal>
 
+      {/* Export for AI coaching */}
+      <button
+        onClick={handleExport}
+        className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-dashed border-surface-600 text-slate-400 hover:text-slate-200 hover:border-slate-500 transition-colors"
+      >
+        <ArrowDownTrayIcon className="w-4 h-4" />
+        <span className="text-sm font-medium">Export Progress for AI Coaching</span>
+      </button>
+
       {/* Measurements modal */}
       <Modal open={showMeasModal} onClose={() => setShowMeasModal(false)} title="Log Measurements">
         <MeasurementsForm
           onSave={(m) => { addMeasurements(m); setShowMeasModal(false) }}
           latest={metrics.measurements[metrics.measurements.length - 1]}
         />
+      </Modal>
+
+      {/* Export modal */}
+      <Modal open={showExportModal} onClose={() => setShowExportModal(false)} title="Progress Report">
+        <div className="space-y-3">
+          <p className="text-xs text-slate-400">
+            Copy this and paste it into Claude or Perplexity to get personalized coaching advice.
+          </p>
+          <textarea
+            readOnly
+            value={exportText}
+            rows={12}
+            className="w-full bg-surface-700 border border-surface-600 rounded-xl px-3 py-2.5 text-xs text-slate-300 font-mono resize-none focus:outline-none"
+          />
+          <Button fullWidth onClick={handleCopy} variant={copied ? 'secondary' : 'primary'}>
+            {copied ? '✓ Copied to Clipboard' : 'Copy to Clipboard'}
+          </Button>
+        </div>
       </Modal>
     </div>
   )
