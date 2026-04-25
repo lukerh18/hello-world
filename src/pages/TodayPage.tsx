@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { PhaseChip } from '../components/workout/PhaseChip'
 import { StatCard } from '../components/metrics/StatCard'
@@ -16,7 +17,7 @@ import { DEFAULT_USER_PROFILE, NUTRITION_TARGETS } from '../data/userProfile'
 import { MORNING_SUPPLEMENTS, POST_WORKOUT_SUPPLEMENTS, EVENING_SUPPLEMENTS } from '../data/supplements'
 import { SLOT_TO_MEAL_ID } from '../data/mealLibrary'
 import type { MealPreset } from '../data/mealLibrary'
-import { ScaleIcon, FireIcon, CalendarIcon, Cog6ToothIcon } from '@heroicons/react/24/outline'
+import { ScaleIcon, FireIcon, CalendarIcon, Cog6ToothIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import type { FoodItem } from '../types'
 
 function getDayOfWeek(): import('../types').DayOfWeek {
@@ -55,9 +56,10 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
   const { week, phase } = useCurrentWeek(startDate)
   const { getTodayLog, getCompletedDates } = useWorkoutLog()
   const { getDayTotals, addFood } = useNutritionLog()
-  const { latestWeight } = useBodyMetrics()
+  const { latestWeight, metrics, addWeightEntry } = useBodyMetrics()
   const { settings } = useSettings()
   const { isChecked, toggleItem, checkAll, isCheatDay, toggleCheatDay } = useDailyAgenda()
+  const [weightInput, setWeightInput] = useState('')
 
   const today = new Date().toISOString().split('T')[0]
   const todayLog = getTodayLog()
@@ -75,6 +77,21 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
     }
     return s
   })()
+
+  // Weekly weight prompt — show if last entry is >= 7 days ago
+  const lastWeightDate = metrics.weightLog.at(-1)?.date
+  const daysSinceWeight = lastWeightDate
+    ? Math.floor((Date.now() - new Date(lastWeightDate + 'T12:00:00').getTime()) / 86400000)
+    : 999
+  const weightSnoozed = localStorage.getItem('weight_prompt_snoozed') ?? ''
+  const showWeightPrompt = daysSinceWeight >= 7 && today > weightSnoozed
+
+  const handleWeightLog = () => {
+    const w = parseFloat(weightInput)
+    if (!w) return
+    addWeightEntry({ date: today, weight: w })
+    setWeightInput('')
+  }
 
   const dayName = new Date().toLocaleDateString('en-US', { weekday: 'long' })
   const dateStr = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric' })
@@ -181,6 +198,48 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
           icon={<CalendarIcon className="w-4 h-4" />}
         />
       </div>
+
+      {/* Weekly weight check-in prompt */}
+      {showWeightPrompt && (
+        <div className="bg-surface-800 rounded-2xl border border-accent/30 px-4 py-3 space-y-2 card-highlight animate-fade-up">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ScaleIcon className="w-4 h-4 text-accent" />
+              <p className="text-sm font-semibold text-slate-200">Weekly weigh-in</p>
+            </div>
+            <button
+              onClick={() => localStorage.setItem('weight_prompt_snoozed', today)}
+              className="text-slate-600 hover:text-slate-400"
+            >
+              <XMarkIcon className="w-4 h-4" />
+            </button>
+          </div>
+          <p className="text-xs text-slate-500">
+            {daysSinceWeight >= 999 ? 'No weight logged yet.' : `Last logged ${daysSinceWeight} days ago.`} Weigh in first thing in the morning for consistency.
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="number"
+              step="0.1"
+              min="100"
+              max="400"
+              value={weightInput}
+              onChange={(e) => setWeightInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleWeightLog()}
+              placeholder={latestWeight ? String(latestWeight) : '193.0'}
+              className="flex-1 bg-surface-700 border border-surface-600 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-accent"
+            />
+            <span className="flex items-center text-xs text-slate-500 pr-1">lbs</span>
+            <button
+              onClick={handleWeightLog}
+              disabled={!weightInput}
+              className="px-4 py-2 rounded-xl bg-accent text-white text-sm font-semibold disabled:opacity-40 hover:bg-accent-light transition-colors"
+            >
+              Log
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Compact macro progress */}
       {!isCheatDay && (

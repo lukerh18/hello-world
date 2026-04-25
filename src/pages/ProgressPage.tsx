@@ -13,10 +13,12 @@ import { useCurrentWeek } from '../hooks/useCurrentWeek'
 import { DEFAULT_USER_PROFILE } from '../data/userProfile'
 import { OVERLOAD_EXERCISE_NAMES } from '../data/progressiveOverload'
 import { generateProgressExport } from '../utils/exportProgress'
+import { WeeklyReview } from '../components/progress/WeeklyReview'
+import { useSettings } from '../hooks/useSettings'
 import type { OverloadKey } from '../types'
-import { ScaleIcon, ArrowTrendingUpIcon, TableCellsIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline'
+import { ScaleIcon, ArrowTrendingUpIcon, TableCellsIcon, ArrowDownTrayIcon, SparklesIcon } from '@heroicons/react/24/outline'
 
-type Tab = 'weight' | 'strength' | 'measurements'
+type Tab = 'weight' | 'strength' | 'measurements' | 'coach'
 
 export default function ProgressPage() {
   const [tab, setTab] = useState<Tab>('weight')
@@ -30,8 +32,9 @@ export default function ProgressPage() {
 
   const { metrics, latestWeight, addWeightEntry, addMeasurements } = useBodyMetrics()
   const { getLogsForExercise } = useWorkoutLog()
+  const { settings } = useSettings()
   const startDate = localStorage.getItem('program_start_date') ?? new Date().toISOString().split('T')[0]
-  const { week } = useCurrentWeek(startDate)
+  const { week, phase } = useCurrentWeek(startDate)
 
   const lbsToGoal = Math.max(0, latestWeight - DEFAULT_USER_PROFILE.goalWeightLbs)
   const totalLost = DEFAULT_USER_PROFILE.startingWeightLbs - latestWeight
@@ -74,9 +77,10 @@ export default function ProgressPage() {
   }
 
   const tabs: { key: Tab; label: string; Icon: typeof ScaleIcon }[] = [
-    { key: 'weight', label: 'Weight', Icon: ScaleIcon },
-    { key: 'strength', label: 'Strength', Icon: ArrowTrendingUpIcon },
-    { key: 'measurements', label: 'Body', Icon: TableCellsIcon },
+    { key: 'weight',       label: 'Weight',   Icon: ScaleIcon },
+    { key: 'strength',     label: 'Strength', Icon: ArrowTrendingUpIcon },
+    { key: 'measurements', label: 'Body',     Icon: TableCellsIcon },
+    { key: 'coach',        label: 'Coach',    Icon: SparklesIcon },
   ]
 
   return (
@@ -253,6 +257,17 @@ export default function ProgressPage() {
           </Button>
         </div>
       </Modal>
+
+      {/* Coach Tab */}
+      {tab === 'coach' && (
+        <WeeklyReview
+          apiKey={settings.anthropicApiKey}
+          healthContext={settings.healthContext}
+          weekNumber={week}
+          phase={phase}
+          latestWeight={latestWeight}
+        />
+      )}
 
       {/* Export for AI coaching */}
       <button

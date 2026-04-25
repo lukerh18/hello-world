@@ -3,11 +3,15 @@ import { useLocalStorage } from './useLocalStorage'
 export interface AppSettings {
   anthropicApiKey: string
   googleClientId: string
+  healthContext: string
+  programStartDate: string
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
   anthropicApiKey: '',
   googleClientId: '',
+  healthContext: '',
+  programStartDate: '',
 }
 
 export function useSettings() {
@@ -22,5 +26,6 @@ export function useSettings() {
     updateSettings,
     hasApiKey: Boolean(settings.anthropicApiKey),
     hasGoogleClientId: Boolean(settings.googleClientId),
+    hasHealthContext: Boolean(settings.healthContext),
   }
 }
