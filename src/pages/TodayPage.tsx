@@ -1,17 +1,23 @@
 import { useNavigate } from 'react-router-dom'
 import { PhaseChip } from '../components/workout/PhaseChip'
-import { MacroRing } from '../components/nutrition/MacroRing'
 import { StatCard } from '../components/metrics/StatCard'
 import { Button } from '../components/shared/Button'
+import { AgendaBlock } from '../components/today/AgendaBlock'
 import { CalendarWidget } from '../components/calendar/CalendarWidget'
 import { useCurrentWeek } from '../hooks/useCurrentWeek'
 import { useWorkoutLog } from '../hooks/useWorkoutLog'
 import { useNutritionLog } from '../hooks/useNutritionLog'
 import { useBodyMetrics } from '../hooks/useBodyMetrics'
 import { useSettings } from '../hooks/useSettings'
+import { useDailyAgenda } from '../hooks/useDailyAgenda'
+import { useDailySummary } from '../hooks/useDailySummary'
 import { getWorkoutForDay } from '../data/program'
-import { NUTRITION_TARGETS, DEFAULT_USER_PROFILE } from '../data/userProfile'
+import { DEFAULT_USER_PROFILE, NUTRITION_TARGETS } from '../data/userProfile'
+import { MORNING_SUPPLEMENTS, EVENING_SUPPLEMENTS } from '../data/supplements'
+import { SLOT_TO_MEAL_ID } from '../data/mealLibrary'
+import type { MealPreset } from '../data/mealLibrary'
 import { ScaleIcon, FireIcon, CalendarIcon, Cog6ToothIcon } from '@heroicons/react/24/outline'
+import type { FoodItem } from '../types'
 
 function getDayOfWeek(): import('../types').DayOfWeek {
   const days: import('../types').DayOfWeek[] = [
@@ -28,10 +34,15 @@ function getGreeting(): string {
 }
 
 function daysUntil(dateStr: string): number {
-  const target = new Date(dateStr + 'T00:00:00')
-  const now = new Date()
-  const diff = target.getTime() - now.getTime()
-  return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)))
+  const diff = new Date(dateStr + 'T00:00:00').getTime() - new Date().getTime()
+  return Math.max(0, Math.ceil(diff / 86400000))
+}
+
+function currentBlock(): 'morning' | 'afternoon' | 'evening' {
+  const h = new Date().getHours()
+  if (h < 12) return 'morning'
+  if (h < 18) return 'afternoon'
+  return 'evening'
 }
 
 interface TodayPageProps {
@@ -43,9 +54,10 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
   const startDate = localStorage.getItem('program_start_date') ?? new Date().toISOString().split('T')[0]
   const { week, phase } = useCurrentWeek(startDate)
   const { getTodayLog, getCompletedDates } = useWorkoutLog()
-  const { getDayTotals } = useNutritionLog()
+  const { getDayTotals, addFood } = useNutritionLog()
   const { latestWeight } = useBodyMetrics()
   const { settings } = useSettings()
+  const { isChecked, toggleItem, checkAll, isCheatDay, toggleCheatDay } = useDailyAgenda()
 
   const today = new Date().toISOString().split('T')[0]
   const todayLog = getTodayLog()
@@ -58,12 +70,8 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
     const d = new Date()
     while (true) {
       const key = d.toISOString().split('T')[0]
-      if (completedDates.includes(key)) {
-        s++
-        d.setDate(d.getDate() - 1)
-      } else {
-        break
-      }
+      if (completedDates.includes(key)) { s++; d.setDate(d.getDate() - 1) }
+      else break
     }
     return s
   })()
@@ -72,31 +80,86 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
   const dateStr = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric' })
   const daysToGoal = daysUntil(DEFAULT_USER_PROFILE.goalDate)
   const lbsToGoal = Math.max(0, latestWeight - DEFAULT_USER_PROFILE.goalWeightLbs)
+  const block = currentBlock()
+
+  const { summary } = useDailySummary(settings.anthropicApiKey, {
+    dayName,
+    workoutLabel: todayWorkout.isRest ? 'Rest Day' : todayWorkout.label,
+    week,
+    phase,
+    weightLbs: latestWeight,
+    daysToGoal,
+  })
+
+  const staticSummary = todayWorkout.isRest
+    ? `Rest day · Week ${week} ${phase} phase · ${lbsToGoal > 0 ? `${lbsToGoal} lbs to goal` : 'Goal reached'}`
+    : `${todayWorkout.label} · Week ${week} ${phase} phase · ${lbsToGoal > 0 ? `${lbsToGoal} lbs to goal` : 'Goal reached'}`
+
+  const handleLogMeal = (slot: { id: string; label: string }, preset: MealPreset) => {
+    const mealId = SLOT_TO_MEAL_ID[slot.id] ?? 'snacks'
+    const food: FoodItem = {
+      id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      name: preset.name,
+      calories: preset.calories,
+      protein: preset.protein,
+      carbs: preset.carbs,
+      fat: preset.fat,
+    }
+    addFood(today, mealId, food)
+  }
+
+  // Compact macro bar
+  const calPct = Math.min(100, (totals.calories / NUTRITION_TARGETS.calories) * 100)
+  const proteinPct = Math.min(100, (totals.protein / NUTRITION_TARGETS.protein) * 100)
 
   return (
-    <div className="px-4 pt-6 pb-4 max-w-lg mx-auto space-y-5">
+    <div className="px-4 pt-6 pb-4 max-w-lg mx-auto space-y-4">
+
       {/* Header */}
-      <div>
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-slate-500 text-sm">{dayName}, {dateStr}</p>
-            <h1 className="text-2xl font-bold text-slate-100 mt-0.5">{getGreeting()}, Luke 👋</h1>
-          </div>
-          {onOpenSettings && (
-            <button
-              onClick={onOpenSettings}
-              className="p-2 rounded-xl bg-surface-800 border border-surface-700 text-slate-400 hover:text-slate-200 mt-1"
-            >
-              <Cog6ToothIcon className="w-5 h-5" />
-            </button>
-          )}
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-slate-500 text-sm">{dayName}, {dateStr}</p>
+          <h1 className="text-2xl font-bold text-slate-100 mt-0.5">{getGreeting()}, Luke</h1>
         </div>
-        <div className="mt-2">
-          <PhaseChip phase={phase} week={week} />
-        </div>
+        {onOpenSettings && (
+          <button
+            onClick={onOpenSettings}
+            className="p-2 rounded-xl bg-surface-800 border border-surface-700 text-slate-400 hover:text-slate-200 mt-1"
+          >
+            <Cog6ToothIcon className="w-5 h-5" />
+          </button>
+        )}
       </div>
 
-      {/* Stats Row */}
+      {/* Phase + streak */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <PhaseChip phase={phase} week={week} />
+        {streak > 0 && <span className="text-xs font-semibold text-warn">🔥 {streak}-day streak</span>}
+      </div>
+
+      {/* Daily summary */}
+      <div className={`rounded-2xl border px-4 py-3 ${isCheatDay ? 'bg-warn/10 border-warn/30' : 'bg-surface-800 border-surface-700'}`}>
+        <div className="flex items-start justify-between gap-3">
+          <p className="text-sm text-slate-300 leading-relaxed flex-1">
+            {summary ?? staticSummary}
+          </p>
+          <button
+            onClick={toggleCheatDay}
+            className={`flex-shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full transition-colors ${
+              isCheatDay
+                ? 'bg-warn text-surface-900'
+                : 'bg-surface-700 text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            {isCheatDay ? '🎉 Cheat Day' : 'Cheat Day?'}
+          </button>
+        </div>
+        {isCheatDay && (
+          <p className="text-xs text-warn/70 mt-1">Supplements still apply. Enjoy it — back on track tomorrow.</p>
+        )}
+      </div>
+
+      {/* Stats */}
       <div className="grid grid-cols-3 gap-3">
         <StatCard
           label="Weight"
@@ -119,86 +182,105 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
         />
       </div>
 
-      {/* Today's Workout Card */}
-      <div className="bg-surface-800 rounded-2xl border border-surface-700 overflow-hidden">
-        <div className="px-4 pt-4 pb-3">
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Today's Workout</p>
-            {streak > 0 && (
-              <span className="text-xs font-semibold text-warn">🔥 {streak}-day streak</span>
-            )}
+      {/* Compact macro progress */}
+      {!isCheatDay && (
+        <div className="bg-surface-800 rounded-2xl border border-surface-700 px-4 py-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Today's Nutrition</p>
+            <button onClick={() => navigate('/nutrition')} className="text-xs text-accent font-semibold">
+              Details →
+            </button>
           </div>
-          {todayWorkout.isRest ? (
-            <div className="py-2">
-              <p className="text-lg font-bold text-slate-100">Rest Day 😴</p>
-              <p className="text-sm text-slate-400">Recovery is part of the plan. Enjoy it.</p>
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-slate-500 w-14">Calories</span>
+              <div className="flex-1 h-1.5 bg-surface-700 rounded-full overflow-hidden">
+                <div className="h-full bg-accent rounded-full transition-all" style={{ width: `${calPct}%` }} />
+              </div>
+              <span className="text-[10px] text-slate-400 w-16 text-right">{totals.calories} / {NUTRITION_TARGETS.calories}</span>
             </div>
-          ) : (
-            <>
-              <p className="text-lg font-bold text-slate-100">{todayWorkout.label}</p>
-              <p className="text-sm text-slate-400">{todayWorkout.focusLabel}</p>
-              <div className="mt-2 flex gap-2 flex-wrap">
-                <span className="text-xs bg-surface-700 text-slate-300 px-2 py-1 rounded-lg">
-                  {todayWorkout.exercises.length} exercises
-                </span>
-                <span className="text-xs bg-surface-700 text-slate-300 px-2 py-1 rounded-lg">
-                  45–55 min
-                </span>
-                {todayWorkout.includesCardio && (
-                  <span className="text-xs bg-accent/20 text-accent px-2 py-1 rounded-lg">
-                    + Cardio
-                  </span>
-                )}
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-slate-500 w-14">Protein</span>
+              <div className="flex-1 h-1.5 bg-surface-700 rounded-full overflow-hidden">
+                <div className="h-full bg-blue-400 rounded-full transition-all" style={{ width: `${proteinPct}%` }} />
               </div>
-            </>
-          )}
+              <span className="text-[10px] text-slate-400 w-16 text-right">{totals.protein}g / {NUTRITION_TARGETS.protein}g</span>
+            </div>
+          </div>
         </div>
+      )}
 
-        {!todayWorkout.isRest && (
-          <div className="px-4 pb-4">
-            {todayLog?.completedAt ? (
-              <div className="flex items-center gap-2 bg-success/10 rounded-xl px-3 py-2.5">
-                <span className="text-success text-lg">✓</span>
-                <p className="text-sm font-semibold text-success">Workout Complete!</p>
-              </div>
-            ) : (
-              <Button
-                fullWidth
-                size="lg"
-                onClick={() => navigate('/workout')}
-              >
-                {todayLog ? 'Continue Workout →' : 'Start Workout →'}
-              </Button>
+      {/* Morning Block */}
+      <AgendaBlock
+        label="Morning"
+        timeRange="Rise – 12 PM"
+        defaultExpanded={block === 'morning'}
+        supplements={MORNING_SUPPLEMENTS}
+        mealSlots={[{ id: 'breakfast', label: 'Breakfast', category: 'breakfast' }]}
+        isChecked={isChecked}
+        onToggle={toggleItem}
+        onCheckAll={checkAll}
+        onLogMeal={handleLogMeal}
+        onCustomMeal={() => navigate('/nutrition')}
+      >
+        {/* Workout card inside morning block */}
+        <div className="mt-1 bg-surface-700/60 rounded-xl border border-surface-600 p-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-slate-500 font-semibold uppercase tracking-wide">Today's Workout</p>
+              {todayWorkout.isRest ? (
+                <p className="text-sm font-bold text-slate-300 mt-0.5">Rest Day 😴</p>
+              ) : (
+                <p className="text-sm font-bold text-slate-100 mt-0.5">{todayWorkout.label}</p>
+              )}
+            </div>
+            {!todayWorkout.isRest && (
+              todayLog?.completedAt ? (
+                <span className="text-xs font-semibold text-success bg-success/10 px-2.5 py-1 rounded-full">✓ Done</span>
+              ) : (
+                <Button size="sm" onClick={() => navigate('/workout')}>
+                  {todayLog ? 'Continue' : 'Start'}
+                </Button>
+              )
             )}
           </div>
-        )}
-      </div>
-
-      {/* Nutrition Preview */}
-      <div className="bg-surface-800 rounded-2xl border border-surface-700 p-4">
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Nutrition Today</p>
-          <button
-            onClick={() => navigate('/nutrition')}
-            className="text-xs text-accent font-semibold hover:text-accent-light"
-          >
-            Log Food →
-          </button>
         </div>
-        <MacroRing
-          calories={totals.calories}
-          targetCalories={NUTRITION_TARGETS.calories}
-          protein={totals.protein}
-          targetProtein={NUTRITION_TARGETS.protein}
-          carbs={totals.carbs}
-          targetCarbs={NUTRITION_TARGETS.carbs}
-          fat={totals.fat}
-          targetFat={NUTRITION_TARGETS.fat}
-          size={120}
-        />
-      </div>
+      </AgendaBlock>
 
-      {/* Google Calendar Widget */}
+      {/* Afternoon Block */}
+      <AgendaBlock
+        label="Afternoon"
+        timeRange="12 PM – 6 PM"
+        defaultExpanded={block === 'afternoon'}
+        mealSlots={[
+          { id: 'lunch', label: 'Lunch', category: 'lunch' },
+          { id: 'snack', label: 'Snack', category: 'snack', optional: true },
+        ]}
+        isChecked={isChecked}
+        onToggle={toggleItem}
+        onCheckAll={checkAll}
+        onLogMeal={handleLogMeal}
+        onCustomMeal={() => navigate('/nutrition')}
+      />
+
+      {/* Evening Block */}
+      <AgendaBlock
+        label="Evening"
+        timeRange="6 PM – Sleep"
+        defaultExpanded={block === 'evening'}
+        supplements={EVENING_SUPPLEMENTS}
+        mealSlots={[
+          { id: 'dinner', label: 'Dinner', category: 'dinner' },
+          { id: 'dessert', label: 'Dessert', category: 'dessert', optional: true },
+        ]}
+        isChecked={isChecked}
+        onToggle={toggleItem}
+        onCheckAll={checkAll}
+        onLogMeal={handleLogMeal}
+        onCustomMeal={() => navigate('/nutrition')}
+      />
+
+      {/* Google Calendar */}
       {settings.googleClientId && (
         <CalendarWidget
           clientId={settings.googleClientId}
@@ -207,11 +289,6 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
         />
       )}
 
-      {/* Warmup Reminder */}
-      <div className="bg-surface-700/50 rounded-2xl p-3 border border-surface-700">
-        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">Warm-Up</p>
-        <p className="text-xs text-slate-400">5 min treadmill + arm circles, leg swings, hip circles, band pull-aparts</p>
-      </div>
     </div>
   )
 }
