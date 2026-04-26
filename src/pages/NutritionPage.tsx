@@ -230,24 +230,6 @@ export default function NutritionPage() {
       />
 
       <ShoppingList open={shoppingOpen} onClose={() => setShoppingOpen(false)} />
-
-      {/* Daily targets reference */}
-      <div className="bg-surface-700/40 rounded-2xl p-3 border border-surface-700">
-        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Daily Targets</p>
-        <div className="grid grid-cols-4 gap-2 text-center">
-          {[
-            { label: 'Calories', value: NUTRITION_TARGETS.calories, unit: 'kcal' },
-            { label: 'Protein', value: NUTRITION_TARGETS.protein, unit: 'g' },
-            { label: 'Carbs', value: NUTRITION_TARGETS.carbs, unit: 'g' },
-            { label: 'Fat', value: NUTRITION_TARGETS.fat, unit: 'g' },
-          ].map(({ label, value, unit }) => (
-            <div key={label}>
-              <p className="text-sm font-bold text-slate-200">{value}<span className="text-[10px] text-slate-500">{unit}</span></p>
-              <p className="text-[10px] text-slate-500">{label}</p>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   )
 }

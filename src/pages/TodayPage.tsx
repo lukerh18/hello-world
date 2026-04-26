@@ -1,7 +1,5 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { PhaseChip } from '../components/workout/PhaseChip'
-import { StatCard } from '../components/metrics/StatCard'
 import { Button } from '../components/shared/Button'
 import { AgendaBlock } from '../components/today/AgendaBlock'
 import { CalendarWidget } from '../components/calendar/CalendarWidget'
@@ -17,7 +15,7 @@ import { DEFAULT_USER_PROFILE, NUTRITION_TARGETS } from '../data/userProfile'
 import { MORNING_SUPPLEMENTS, POST_WORKOUT_SUPPLEMENTS, EVENING_SUPPLEMENTS } from '../data/supplements'
 import { SLOT_TO_MEAL_ID } from '../data/mealLibrary'
 import type { MealPreset } from '../data/mealLibrary'
-import { ScaleIcon, FireIcon, CalendarIcon, Cog6ToothIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import { ScaleIcon, Cog6ToothIcon, XMarkIcon } from '@heroicons/react/24/outline'
 import type { FoodItem } from '../types'
 
 function getDayOfWeek(): import('../types').DayOfWeek {
@@ -78,7 +76,6 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
     return s
   })()
 
-  // Weekly weight prompt — show if last entry is >= 7 days ago
   const lastWeightDate = metrics.weightLog.at(-1)?.date
   const daysSinceWeight = lastWeightDate
     ? Math.floor((Date.now() - new Date(lastWeightDate + 'T12:00:00').getTime()) / 86400000)
@@ -125,7 +122,6 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
     addFood(today, mealId, food)
   }
 
-  // Compact macro bar
   const calPct = Math.min(100, (totals.calories / NUTRITION_TARGETS.calories) * 100)
   const proteinPct = Math.min(100, (totals.protein / NUTRITION_TARGETS.protein) * 100)
 
@@ -137,25 +133,35 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
         <div>
           <p className="text-slate-500 text-sm">{dayName}, {dateStr}</p>
           <h1 className="text-2xl font-bold text-gradient mt-0.5">{getGreeting()}, Luke</h1>
+          {/* Ambient stats — one quiet line instead of three cards */}
+          <p className="text-xs text-slate-600 mt-1.5">
+            <span className="text-slate-400">{latestWeight} lbs</span>
+            {lbsToGoal > 0
+              ? <> · <span className="text-slate-400">{lbsToGoal} lbs</span> to goal · <span className="text-slate-400">{daysToGoal}d</span> left</>
+              : <span className="text-success"> · Goal reached 🎉</span>
+            }
+          </p>
         </div>
         {onOpenSettings && (
           <button
             onClick={onOpenSettings}
-            className="p-2 rounded-xl bg-surface-800 border border-surface-700 text-slate-400 hover:text-slate-200 mt-1"
+            className="p-2 rounded-xl bg-surface-800 text-slate-600 hover:text-slate-300 mt-1 transition-colors"
           >
             <Cog6ToothIcon className="w-5 h-5" />
           </button>
         )}
       </div>
 
-      {/* Phase + streak */}
-      <div className="flex items-center gap-3 flex-wrap">
-        <PhaseChip phase={phase} week={week} />
-        {streak > 0 && <span className="text-xs font-semibold text-warn animate-streak-fire inline-block">🔥 {streak}-day streak</span>}
-      </div>
+      {/* Week + streak — single ambient line */}
+      <p className="text-xs text-slate-600 -mt-2">
+        Week {week} · {phase} phase
+        {streak > 0 && (
+          <span className="text-warn animate-streak-fire inline-block ml-2">🔥 {streak}-day streak</span>
+        )}
+      </p>
 
       {/* Daily summary */}
-      <div className={`rounded-2xl border px-4 py-3 ${isCheatDay ? 'bg-warn/10 border-warn/30' : 'bg-surface-800 border-surface-700'}`}>
+      <div className={`rounded-2xl px-4 py-3 ${isCheatDay ? 'bg-warn/10 border border-warn/20' : 'bg-surface-800'}`}>
         <div className="flex items-start justify-between gap-3">
           <p className="text-sm text-slate-300 leading-relaxed flex-1">
             {summary ?? staticSummary}
@@ -165,43 +171,20 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
             className={`flex-shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full transition-colors ${
               isCheatDay
                 ? 'bg-warn text-surface-900'
-                : 'bg-surface-700 text-slate-400 hover:text-slate-200'
+                : 'bg-surface-700 text-slate-600 hover:text-slate-300'
             }`}
           >
-            {isCheatDay ? '🎉 Cheat Day' : 'Cheat Day?'}
+            {isCheatDay ? '🎉 Cheat Day' : 'Cheat?'}
           </button>
         </div>
         {isCheatDay && (
-          <p className="text-xs text-warn/70 mt-1">Supplements still apply. Enjoy it — back on track tomorrow.</p>
+          <p className="text-xs text-warn/60 mt-1">Supplements still apply. Enjoy — back on track tomorrow.</p>
         )}
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-3">
-        <StatCard
-          label="Weight"
-          value={latestWeight}
-          unit="lbs"
-          icon={<ScaleIcon className="w-4 h-4" />}
-        />
-        <StatCard
-          label="To Goal"
-          value={lbsToGoal > 0 ? `-${lbsToGoal}` : '✓'}
-          unit={lbsToGoal > 0 ? 'lbs' : undefined}
-          color={lbsToGoal === 0 ? 'text-success' : 'text-slate-100'}
-          icon={<FireIcon className="w-4 h-4" />}
-        />
-        <StatCard
-          label="Days Left"
-          value={daysToGoal}
-          subtext="to July 2026"
-          icon={<CalendarIcon className="w-4 h-4" />}
-        />
-      </div>
-
-      {/* Weekly weight check-in prompt */}
+      {/* Weekly weight check-in */}
       {showWeightPrompt && (
-        <div className="bg-surface-800 rounded-2xl border border-accent/30 px-4 py-3 space-y-2 card-highlight animate-fade-up">
+        <div className="bg-surface-800 rounded-2xl px-4 py-3 space-y-2 card-highlight animate-fade-up">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <ScaleIcon className="w-4 h-4 text-accent" />
@@ -215,7 +198,7 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
             </button>
           </div>
           <p className="text-xs text-slate-500">
-            {daysSinceWeight >= 999 ? 'No weight logged yet.' : `Last logged ${daysSinceWeight} days ago.`} Weigh in first thing in the morning for consistency.
+            {daysSinceWeight >= 999 ? 'No weight logged yet.' : `Last logged ${daysSinceWeight} days ago.`} Weigh in first thing in the morning.
           </p>
           <div className="flex gap-2">
             <input
@@ -243,27 +226,27 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
 
       {/* Compact macro progress */}
       {!isCheatDay && (
-        <div className="bg-surface-800 rounded-2xl border border-surface-700 px-4 py-3 space-y-2">
+        <div className="bg-surface-800 rounded-2xl px-4 py-3 space-y-2">
           <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Today's Nutrition</p>
+            <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Today's Nutrition</p>
             <button onClick={() => navigate('/nutrition')} className="text-xs text-accent font-semibold">
               Details →
             </button>
           </div>
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-slate-500 w-14">Calories</span>
-              <div className="flex-1 h-1.5 bg-surface-700 rounded-full overflow-hidden">
+              <span className="text-[10px] text-slate-600 w-14">Calories</span>
+              <div className="flex-1 h-1 bg-surface-700 rounded-full overflow-hidden">
                 <div className="h-full bg-accent rounded-full transition-all" style={{ width: `${calPct}%` }} />
               </div>
-              <span className="text-[10px] text-slate-400 w-16 text-right">{totals.calories} / {NUTRITION_TARGETS.calories}</span>
+              <span className="text-[10px] text-slate-500 w-16 text-right">{totals.calories} / {NUTRITION_TARGETS.calories}</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-[10px] text-slate-500 w-14">Protein</span>
-              <div className="flex-1 h-1.5 bg-surface-700 rounded-full overflow-hidden">
-                <div className="h-full bg-blue-400 rounded-full transition-all" style={{ width: `${proteinPct}%` }} />
+              <span className="text-[10px] text-slate-600 w-14">Protein</span>
+              <div className="flex-1 h-1 bg-surface-700 rounded-full overflow-hidden">
+                <div className="h-full bg-accent-muted rounded-full transition-all" style={{ width: `${proteinPct}%` }} />
               </div>
-              <span className="text-[10px] text-slate-400 w-16 text-right">{totals.protein}g / {NUTRITION_TARGETS.protein}g</span>
+              <span className="text-[10px] text-slate-500 w-16 text-right">{totals.protein}g / {NUTRITION_TARGETS.protein}g</span>
             </div>
           </div>
         </div>
@@ -282,13 +265,12 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
         onLogMeal={handleLogMeal}
         onCustomMeal={() => navigate('/nutrition')}
       >
-        {/* Workout card inside morning block */}
-        <div className="mt-1 bg-surface-700/60 rounded-xl border border-surface-600 p-3">
+        <div className="mt-1 bg-surface-700/50 rounded-xl p-3">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-xs text-slate-500 font-semibold uppercase tracking-wide">Today's Workout</p>
+              <p className="text-xs text-slate-600 font-semibold uppercase tracking-wide">Today's Workout</p>
               {todayWorkout.isRest ? (
-                <p className="text-sm font-bold text-slate-300 mt-0.5">Rest Day 😴</p>
+                <p className="text-sm font-bold text-slate-400 mt-0.5">Rest Day 😴</p>
               ) : (
                 <p className="text-sm font-bold text-slate-100 mt-0.5">{todayWorkout.label}</p>
               )}
@@ -340,7 +322,6 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
         onCustomMeal={() => navigate('/nutrition')}
       />
 
-      {/* Google Calendar */}
       {settings.googleClientId && (
         <CalendarWidget
           clientId={settings.googleClientId}

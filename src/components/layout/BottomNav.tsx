@@ -24,31 +24,22 @@ const tabs = [
 
 export function BottomNav() {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-surface-800 border-t border-surface-700 safe-bottom z-40">
-      <div className="flex items-center justify-around h-16">
+    <nav className="fixed bottom-0 left-0 right-0 bg-surface-800 border-t border-surface-600 safe-bottom z-40">
+      <div className="flex items-center justify-around h-14">
         {tabs.map(({ to, label, Icon, IconActive }) => (
           <NavLink
             key={to}
             to={to}
             end={to === '/'}
+            aria-label={label}
             className={({ isActive }) =>
-              `flex flex-col items-center justify-center gap-0.5 w-full h-full transition-colors ${
-                isActive ? 'text-accent' : 'text-slate-500'
+              `flex items-center justify-center w-full h-full transition-colors ${
+                isActive ? 'text-accent' : 'text-slate-600 hover:text-slate-400'
               }`
             }
           >
             {({ isActive }) =>
-              isActive ? (
-                <>
-                  <IconActive className="w-6 h-6" />
-                  <span className="text-[10px] font-semibold">{label}</span>
-                </>
-              ) : (
-                <>
-                  <Icon className="w-6 h-6" />
-                  <span className="text-[10px] font-medium">{label}</span>
-                </>
-              )
+              isActive ? <IconActive className="w-6 h-6" /> : <Icon className="w-6 h-6" />
             }
           </NavLink>
         ))}

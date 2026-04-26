@@ -5,19 +5,19 @@ export default {
     extend: {
       colors: {
         surface: {
-          900: '#080808',  // near-black background
-          800: '#111111',  // cards
-          700: '#1a1a1a',  // inputs, inner surfaces
-          600: '#252525',  // borders, dividers
+          900: '#0B0907',  // warm desert night
+          800: '#141009',  // cards
+          700: '#1E1911',  // inputs, inner surfaces
+          600: '#2B2215',  // borders, dividers
         },
         accent: {
-          DEFAULT: '#f97316',
-          light:   '#fb923c',
-          muted:   '#7c3aed',
+          DEFAULT: '#C8902A',  // Joshua Tree amber
+          light:   '#D4A44A',  // warm gold
+          muted:   '#6B8A6E',  // desert sage
         },
-        success: '#22c55e',
-        warn:    '#eab308',
-        danger:  '#ef4444',
+        success: '#7A9E7E',  // sage green
+        warn:    '#D4952A',  // warm amber-yellow
+        danger:  '#C04A3A',  // terracotta red
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
@@ -36,7 +36,7 @@ export default {
         },
         'block-glow': {
           '0%, 100%': { boxShadow: '0 0 0 0 transparent' },
-          '40%':      { boxShadow: '0 0 28px 4px rgba(34, 197, 94, 0.25)' },
+          '40%':      { boxShadow: '0 0 24px 4px rgba(122, 158, 126, 0.22)' },
         },
         'fade-up': {
           'from': { opacity: '0', transform: 'translateY(6px)' },

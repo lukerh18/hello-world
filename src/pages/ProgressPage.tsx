@@ -260,23 +260,23 @@ export default function ProgressPage() {
 
       {/* Coach Tab */}
       {tab === 'coach' && (
-        <WeeklyReview
-          apiKey={settings.anthropicApiKey}
-          healthContext={settings.healthContext}
-          weekNumber={week}
-          phase={phase}
-          latestWeight={latestWeight}
-        />
+        <div className="space-y-4">
+          <WeeklyReview
+            apiKey={settings.anthropicApiKey}
+            healthContext={settings.healthContext}
+            weekNumber={week}
+            phase={phase}
+            latestWeight={latestWeight}
+          />
+          <button
+            onClick={handleExport}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-dashed border-surface-600 text-slate-600 hover:text-slate-300 hover:border-surface-500 transition-colors"
+          >
+            <ArrowDownTrayIcon className="w-4 h-4" />
+            <span className="text-sm">Export for external AI coach</span>
+          </button>
+        </div>
       )}
-
-      {/* Export for AI coaching */}
-      <button
-        onClick={handleExport}
-        className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-dashed border-surface-600 text-slate-400 hover:text-slate-200 hover:border-slate-500 transition-colors"
-      >
-        <ArrowDownTrayIcon className="w-4 h-4" />
-        <span className="text-sm font-medium">Export Progress for AI Coaching</span>
-      </button>
 
       {/* Measurements modal */}
       <Modal open={showMeasModal} onClose={() => setShowMeasModal(false)} title="Log Measurements">
