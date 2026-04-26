@@ -1,10 +1,12 @@
 import type { UserProfile, NutritionTargets } from '../types'
 
+// Targets from Perplexity plan (Jan 2026): Mifflin-St Jeor + 1.375 multiplier - 500 kcal deficit
+// Priority: LDL reduction via soluble fiber + omega-3s; high protein to counter Zoloft appetite effects
 export const NUTRITION_TARGETS: NutritionTargets = {
-  calories: 2537,
-  protein: 185,
-  carbs: 289,
-  fat: 71,
+  calories: 2100,
+  protein: 200,
+  carbs: 190,
+  fat: 60,
 }
 
 export const DEFAULT_USER_PROFILE: UserProfile = {

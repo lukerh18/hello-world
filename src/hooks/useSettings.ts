@@ -3,6 +3,7 @@ import { useLocalStorage } from './useLocalStorage'
 export interface AppSettings {
   anthropicApiKey: string
   googleClientId: string
+  ouraToken: string
   healthContext: string
   programStartDate: string
 }
@@ -10,6 +11,7 @@ export interface AppSettings {
 const DEFAULT_SETTINGS: AppSettings = {
   anthropicApiKey: '',
   googleClientId: '',
+  ouraToken: '',
   healthContext: '',
   programStartDate: '',
 }
