@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    background-color: #0B0907;
+    color: #EDE6D6;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background-color: #0B0907;
+    min-height: 100dvh;
+    overscroll-behavior: none;
+  }
+
+  input[type='number']::-webkit-inner-spin-button,
+  input[type='number']::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  input[type='number'] {
+    -moz-appearance: textfield;
+  }
+}
+
+@layer utilities {
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* Gradient text — warm sand to Joshua Tree amber */
+  .text-gradient {
+    background: linear-gradient(135deg, #EDE6D6 0%, #C8902A 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Subtle top-edge card highlight */
+  .card-highlight {
+    box-shadow: inset 0 1px 0 rgba(237, 230, 214, 0.05);
+  }
+
+  /* Amber accent glow */
+  .glow-accent {
+    box-shadow: 0 0 16px 0 rgba(200, 144, 42, 0.18);
+  }
+
+  /* Sage success glow */
+  .glow-success {
+    box-shadow: 0 0 16px 0 rgba(122, 158, 126, 0.2);
+  }
+}
