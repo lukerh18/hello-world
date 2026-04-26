@@ -29,7 +29,17 @@ export interface FreeSlot {
   label: string
 }
 
-const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.events'
+const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events'
+
+export type EventCategory = 'physical' | 'family' | 'work' | 'other'
+
+export function categorizeEvent(summary: string): EventCategory {
+  const s = summary.toLowerCase()
+  if (/soccer|game|match|baseball|basketball|football|hockey|tennis|lacrosse|practice|sport|gym|crossfit/.test(s)) return 'physical'
+  if (/kids?|child|daughter|son|school|pickup|drop.?off|birthday|recital|play date|playdate|party|family|daycare/.test(s)) return 'family'
+  if (/meeting|standup|stand.up|call|review|sync|interview|1:1|one.on.one|presentation|demo|workshop/.test(s)) return 'work'
+  return 'other'
+}
 
 function loadGisScript(): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -114,8 +124,9 @@ export function useGoogleCalendar(clientId: string) {
   const getFreeSlots = useCallback((): FreeSlot[] => {
     const now = new Date()
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    const windowStart = new Date(today); windowStart.setHours(8, 0, 0, 0)
-    const windowEnd = new Date(today); windowEnd.setHours(12, 0, 0, 0)
+    // Primary workout window: 5–7 AM
+    const windowStart = new Date(today); windowStart.setHours(5, 0, 0, 0)
+    const windowEnd = new Date(today); windowEnd.setHours(7, 0, 0, 0)
     const workoutDuration = 55 * 60 * 1000
 
     const busyTimes = events
@@ -136,6 +147,39 @@ export function useGoogleCalendar(clientId: string) {
 
     if (cursor.getTime() + workoutDuration <= windowEnd.getTime()) {
       const slotEnd = new Date(cursor.getTime() + workoutDuration)
+      slots.push({ start: new Date(cursor), end: slotEnd, label: formatSlot(cursor, slotEnd) })
+    }
+
+    return slots
+  }, [events])
+
+  // Evening 30-min free blocks (6–9 PM) for family activity suggestions
+  const getEveningSlots = useCallback((): FreeSlot[] => {
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const windowStart = new Date(today); windowStart.setHours(18, 0, 0, 0)
+    const windowEnd = new Date(today); windowEnd.setHours(21, 0, 0, 0)
+    const blockDuration = 30 * 60 * 1000
+
+    const busyTimes = events
+      .filter((e) => e.start && e.end)
+      .map((e) => ({ start: new Date(e.start), end: new Date(e.end) }))
+      .sort((a, b) => a.start.getTime() - b.start.getTime())
+
+    const slots: FreeSlot[] = []
+    let cursor = windowStart
+
+    for (const busy of busyTimes) {
+      if (cursor.getTime() + blockDuration <= busy.start.getTime()) {
+        const slotEnd = new Date(cursor.getTime() + blockDuration)
+        slots.push({ start: new Date(cursor), end: slotEnd, label: formatSlot(cursor, slotEnd) })
+        break
+      }
+      if (busy.end > cursor) cursor = new Date(busy.end)
+    }
+
+    if (slots.length === 0 && cursor.getTime() + blockDuration <= windowEnd.getTime()) {
+      const slotEnd = new Date(cursor.getTime() + blockDuration)
       slots.push({ start: new Date(cursor), end: slotEnd, label: formatSlot(cursor, slotEnd) })
     }
 
@@ -171,7 +215,7 @@ export function useGoogleCalendar(clientId: string) {
     [accessToken]
   )
 
-  return { isConnected, connect, events, getFreeSlots, addWorkoutEvent, loading, error }
+  return { isConnected, connect, events, getFreeSlots, getEveningSlots, addWorkoutEvent, loading, error }
 }
 
 function formatSlot(start: Date, end: Date): string {

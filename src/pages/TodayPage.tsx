@@ -12,7 +12,14 @@ import { useDailyAgenda } from '../hooks/useDailyAgenda'
 import { useDailySummary } from '../hooks/useDailySummary'
 import { getWorkoutForDay } from '../data/program'
 import { DEFAULT_USER_PROFILE, NUTRITION_TARGETS } from '../data/userProfile'
-import { MORNING_SUPPLEMENTS, POST_WORKOUT_SUPPLEMENTS, EVENING_SUPPLEMENTS } from '../data/supplements'
+import {
+  MORNING_SUPPLEMENTS,
+  PRE_WORKOUT_SUPPLEMENTS,
+  POST_WORKOUT_SUPPLEMENTS,
+  AFTERNOON_SUPPLEMENTS,
+  EVENING_SUPPLEMENTS,
+} from '../data/supplements'
+import { OuraCard } from '../components/today/OuraCard'
 import { SLOT_TO_MEAL_ID } from '../data/mealLibrary'
 import type { MealPreset } from '../data/mealLibrary'
 import { ScaleIcon, Cog6ToothIcon, XMarkIcon } from '@heroicons/react/24/outline'
@@ -263,12 +270,15 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
         </div>
       )}
 
+      {/* Oura recovery card */}
+      {settings.ouraToken && <OuraCard token={settings.ouraToken} />}
+
       {/* Morning Block */}
       <AgendaBlock
         label="Morning"
         timeRange="Rise – 12 PM"
         defaultExpanded={block === 'morning'}
-        supplements={MORNING_SUPPLEMENTS}
+        supplements={[...MORNING_SUPPLEMENTS, ...(todayWorkout.isRest ? [] : PRE_WORKOUT_SUPPLEMENTS)]}
         mealSlots={[{ id: 'breakfast', label: 'Breakfast', category: 'breakfast', loggedName: getLoggedName('breakfast') }]}
         isChecked={isChecked}
         onToggle={toggleItem}
@@ -304,7 +314,10 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
         label="Afternoon"
         timeRange="12 PM – 6 PM"
         defaultExpanded={block === 'afternoon'}
-        supplements={todayWorkout.isRest ? [] : POST_WORKOUT_SUPPLEMENTS}
+        supplements={[
+          ...(todayWorkout.isRest ? [] : POST_WORKOUT_SUPPLEMENTS),
+          ...AFTERNOON_SUPPLEMENTS,
+        ]}
         mealSlots={[
           { id: 'lunch', label: 'Lunch', category: 'lunch', loggedName: getLoggedName('lunch') },
           { id: 'snack', label: 'Snack', category: 'snack', optional: true, loggedName: getLoggedName('snack') },
@@ -338,6 +351,7 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
           clientId={settings.googleClientId}
           todayWorkout={todayWorkout.isRest ? null : todayWorkout}
           currentWeek={week}
+          workoutLogged={Boolean(todayLog?.completedAt)}
         />
       )}
 
