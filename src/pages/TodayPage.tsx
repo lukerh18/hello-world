@@ -53,7 +53,7 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
   const startDate = localStorage.getItem('program_start_date') ?? new Date().toISOString().split('T')[0]
   const { week, phase } = useCurrentWeek(startDate)
   const { getTodayLog, getCompletedDates } = useWorkoutLog()
-  const { getDayTotals, addFood } = useNutritionLog()
+  const { getDayTotals, addFood, getByDate } = useNutritionLog()
   const { latestWeight, metrics, addWeightEntry } = useBodyMetrics()
   const { settings } = useSettings()
   const { isChecked, toggleItem, checkAll, isCheatDay, toggleCheatDay } = useDailyAgenda()
@@ -64,6 +64,17 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
   const todayWorkout = getWorkoutForDay(getDayOfWeek())
   const totals = getDayTotals(today)
   const completedDates = getCompletedDates()
+  const dayData = getByDate(today)
+
+  // Returns the logged food summary for a given agenda slot ("Chicken Bowl +1 more")
+  const getLoggedName = (slotId: string): string | undefined => {
+    const mealId = SLOT_TO_MEAL_ID[slotId] ?? slotId
+    const meal = dayData.meals.find((m) => m.id === mealId)
+    const count = meal?.foods.length ?? 0
+    if (count === 0) return undefined
+    const first = meal!.foods[0].name
+    return count > 1 ? `${first} +${count - 1} more` : first
+  }
 
   const streak = (() => {
     let s = 0
@@ -258,7 +269,7 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
         timeRange="Rise – 12 PM"
         defaultExpanded={block === 'morning'}
         supplements={MORNING_SUPPLEMENTS}
-        mealSlots={[{ id: 'breakfast', label: 'Breakfast', category: 'breakfast' }]}
+        mealSlots={[{ id: 'breakfast', label: 'Breakfast', category: 'breakfast', loggedName: getLoggedName('breakfast') }]}
         isChecked={isChecked}
         onToggle={toggleItem}
         onCheckAll={checkAll}
@@ -295,8 +306,8 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
         defaultExpanded={block === 'afternoon'}
         supplements={todayWorkout.isRest ? [] : POST_WORKOUT_SUPPLEMENTS}
         mealSlots={[
-          { id: 'lunch', label: 'Lunch', category: 'lunch' },
-          { id: 'snack', label: 'Snack', category: 'snack', optional: true },
+          { id: 'lunch', label: 'Lunch', category: 'lunch', loggedName: getLoggedName('lunch') },
+          { id: 'snack', label: 'Snack', category: 'snack', optional: true, loggedName: getLoggedName('snack') },
         ]}
         isChecked={isChecked}
         onToggle={toggleItem}
@@ -312,8 +323,8 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
         defaultExpanded={block === 'evening'}
         supplements={EVENING_SUPPLEMENTS}
         mealSlots={[
-          { id: 'dinner', label: 'Dinner', category: 'dinner' },
-          { id: 'dessert', label: 'Dessert', category: 'dessert', optional: true },
+          { id: 'dinner', label: 'Dinner', category: 'dinner', loggedName: getLoggedName('dinner') },
+          { id: 'dessert', label: 'Dessert', category: 'dessert', optional: true, loggedName: getLoggedName('dessert') },
         ]}
         isChecked={isChecked}
         onToggle={toggleItem}

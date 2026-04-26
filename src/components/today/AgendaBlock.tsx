@@ -38,8 +38,8 @@ export function AgendaBlock({
   isChecked,
   onToggle,
   onCheckAll,
-  onLogMeal,
   onCustomMeal,
+  onLogMeal,
 }: AgendaBlockProps) {
   const [expanded, setExpanded] = useState(defaultExpanded)
   const [pickerSlot, setPickerSlot] = useState<MealSlot | null>(null)
@@ -47,13 +47,20 @@ export function AgendaBlock({
   const [glowing, setGlowing] = useState(false)
   const prevDoneRef = useRef(0)
 
+  // A meal slot is "done" if manually checked OR if the nutrition log has food for it
+  const isMealDone = (slot: MealSlot) => isChecked(`meal-${slot.id}`) || !!slot.loggedName
+
+  const suppDone = supplements.filter((s) => isChecked(`supp-${s.id}`)).length
+  const mealDone = mealSlots.filter(isMealDone).length
+  const doneCount = suppDone + mealDone
+  const totalCount = supplements.length + mealSlots.length
+  const allDone = doneCount === totalCount && totalCount > 0
+
+  // IDs used only for supplement toggles and checkAll
   const allIds = [
     ...supplements.map((s) => `supp-${s.id}`),
     ...mealSlots.map((m) => `meal-${m.id}`),
   ]
-  const doneCount = allIds.filter(isChecked).length
-  const totalCount = allIds.length
-  const allDone = doneCount === totalCount && totalCount > 0
 
   // Celebrate when block first becomes fully complete
   useEffect(() => {
@@ -144,10 +151,12 @@ export function AgendaBlock({
             {/* Meal slots */}
             {mealSlots.map((slot) => {
               const id = `meal-${slot.id}`
-              const done = isChecked(id)
+              // Done if manually checked OR if nutrition log has food for this meal
+              const done = isMealDone(slot)
               const popping = justChecked.has(id)
               return (
                 <div key={id} className="flex items-center gap-2">
+                  {/* Manual checkbox — only meaningful for supplements; meal done state comes from log */}
                   <button onClick={() => handleToggle(id)} className="flex-shrink-0">
                     <span className={popping ? 'animate-check-pop' : ''}>
                       {done
@@ -160,17 +169,20 @@ export function AgendaBlock({
                     onClick={() => setPickerSlot(slot)}
                     className={`flex-1 flex items-center justify-between px-3 py-2.5 rounded-xl border transition-all ${
                       done
-                        ? 'bg-success/10 border-success/30 text-slate-400'
-                        : 'bg-surface-700 border-surface-600 text-slate-300 hover:border-accent/40 hover:bg-surface-600/50'
+                        ? 'bg-success/10 border-success/30'
+                        : 'bg-surface-700 border-surface-600 hover:border-accent/40 hover:bg-surface-600/50'
                     }`}
                   >
-                    <span className="text-sm font-medium">
+                    <span className={`text-sm font-medium ${done ? 'text-slate-400' : 'text-slate-300'}`}>
                       {slot.label}
                       {slot.optional && !done && (
                         <span className="text-slate-500 text-xs ml-1 font-normal">(optional)</span>
                       )}
                     </span>
-                    {!done && <span className="text-[11px] text-slate-500">tap to log →</span>}
+                    {done && slot.loggedName
+                      ? <span className="text-xs text-success/70 truncate max-w-[140px] text-right">{slot.loggedName}</span>
+                      : !done && <span className="text-[11px] text-slate-500">tap to log →</span>
+                    }
                   </button>
                 </div>
               )
@@ -209,7 +221,8 @@ export function AgendaBlock({
           category={pickerSlot.category}
           onSelect={(preset) => {
             onLogMeal(pickerSlot, preset)
-            handleToggle(`meal-${pickerSlot.id}`)
+            // Do NOT toggle here — done state is derived from the nutrition log
+            // so it will update automatically on the next render
             setPickerSlot(null)
           }}
           onCustom={() => { onCustomMeal(); setPickerSlot(null) }}

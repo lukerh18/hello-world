@@ -180,6 +180,17 @@ export const MEAL_PRESETS: MealPreset[] = [
   },
   // ─── Lunch ────────────────────────────────────────────────────────────────────
   {
+    id: 'lunch-chicken-lentils',
+    name: 'Chicken & Lentil Bowl',
+    emoji: '🍲',
+    category: 'lunch',
+    calories: 530,
+    protein: 72,
+    carbs: 43,
+    fat: 7,
+    description: '6oz grilled chicken breast, 1 cup lentils, 1 cup spinach, salsa',
+  },
+  {
     id: 'lunch-chicken-salad',
     name: 'Chicken & Salad',
     emoji: '🥗',
