@@ -1,5 +1,27 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Component } from 'react'
+import type { ReactNode } from 'react'
 import { HashRouter, Routes, Route } from 'react-router-dom'
+
+class ErrorBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
+  constructor(props: { children: ReactNode }) {
+    super(props)
+    this.state = { error: null }
+  }
+  static getDerivedStateFromError(e: unknown) {
+    return { error: e instanceof Error ? e.message + '\n' + e.stack : String(e) }
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="p-6 text-red-400 text-xs whitespace-pre-wrap font-mono bg-black min-h-dvh">
+          <p className="font-bold text-sm mb-2">App crash — please share this with support:</p>
+          {this.state.error}
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 import { BottomNav } from './components/layout/BottomNav'
 import { Modal } from './components/shared/Modal'
 import { Button } from './components/shared/Button'
@@ -53,6 +75,7 @@ export default function App() {
   }
 
   return (
+    <ErrorBoundary>
     <HashRouter>
       <div className="min-h-dvh bg-surface-900 pb-20">
         <Routes>
@@ -69,5 +92,6 @@ export default function App() {
       </Modal>
       <SettingsModal open={showSettings} onClose={() => setShowSettings(false)} />
     </HashRouter>
+    </ErrorBoundary>
   )
 }
