@@ -3,7 +3,7 @@ import { Modal } from './Modal'
 import { Input } from './Input'
 import { Button } from './Button'
 import { useSettings } from '../../hooks/useSettings'
-import { KeyIcon, CalendarIcon, CheckCircleIcon, HeartIcon } from '@heroicons/react/24/outline'
+import { KeyIcon, CalendarIcon, CheckCircleIcon, HeartIcon, SparklesIcon } from '@heroicons/react/24/outline'
 
 interface SettingsModalProps {
   open: boolean
@@ -14,6 +14,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
   const { settings, updateSettings, hasApiKey, hasGoogleClientId, hasHealthContext } = useSettings()
   const [apiKey, setApiKey] = useState(settings.anthropicApiKey)
   const [clientId, setClientId] = useState(settings.googleClientId)
+  const [ouraToken, setOuraToken] = useState(settings.ouraToken)
   const [healthContext, setHealthContext] = useState(settings.healthContext)
   const [programStart, setProgramStart] = useState(
     settings.programStartDate || localStorage.getItem('program_start_date') || ''
@@ -24,6 +25,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
     updateSettings({
       anthropicApiKey: apiKey.trim(),
       googleClientId: clientId.trim(),
+      ouraToken: ouraToken.trim(),
       healthContext: healthContext.trim(),
       programStartDate: programStart,
     })
@@ -100,6 +102,33 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
           </a>
         </section>
 
+        {/* Oura Ring */}
+        <section className="space-y-2">
+          <div className="flex items-center gap-2 mb-2">
+            <SparklesIcon className="w-4 h-4 text-danger" />
+            <h3 className="text-sm font-semibold text-slate-200">Oura Ring</h3>
+            {ouraToken && <CheckCircleIcon className="w-4 h-4 text-success ml-auto" />}
+          </div>
+          <p className="text-xs text-slate-400">
+            Pulls sleep, readiness, HRV, and activity scores from your ring to personalize coaching. Stored only on this device.
+          </p>
+          <Input
+            label="Personal Access Token"
+            type="password"
+            value={ouraToken}
+            onChange={(e) => setOuraToken(e.target.value)}
+            placeholder="eyJ..."
+          />
+          <a
+            href="https://cloud.ouraring.com/personal-access-tokens"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-accent hover:underline"
+          >
+            Generate your token at cloud.ouraring.com →
+          </a>
+        </section>
+
         {/* Google Calendar */}
         <section className="space-y-2">
           <div className="flex items-center gap-2 mb-2">
@@ -108,7 +137,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
             {hasGoogleClientId && <CheckCircleIcon className="w-4 h-4 text-success ml-auto" />}
           </div>
           <p className="text-xs text-slate-400">
-            Connects your Google Calendar to find open workout slots and schedule sessions.
+            Shows your day's schedule, highlights soccer games and kids' activities, and suggests family workouts when your gym session is missed.
           </p>
           <Input
             label="Google OAuth Client ID"
