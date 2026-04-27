@@ -32,6 +32,7 @@ import WorkoutPage from './pages/WorkoutPage'
 import NutritionPage from './pages/NutritionPage'
 import ProgressPage from './pages/ProgressPage'
 import ProgramPage from './pages/ProgramPage'
+import HabitsPage from './pages/HabitsPage'
 
 function OnboardingModal({ onComplete }: { onComplete: (date: string) => void }) {
   const today = new Date().toISOString().split('T')[0]
@@ -84,6 +85,7 @@ export default function App() {
           <Route path="/nutrition" element={<NutritionPage />} />
           <Route path="/progress" element={<ProgressPage />} />
           <Route path="/program" element={<ProgramPage />} />
+          <Route path="/life" element={<HabitsPage />} />
         </Routes>
         <BottomNav />
       </div>

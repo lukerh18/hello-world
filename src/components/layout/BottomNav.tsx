@@ -4,22 +4,22 @@ import {
   BoltIcon,
   ChartBarIcon,
   TrophyIcon,
-  CalendarDaysIcon,
+  SparklesIcon,
 } from '@heroicons/react/24/outline'
 import {
   HomeIcon as HomeIconSolid,
   BoltIcon as BoltIconSolid,
   ChartBarIcon as ChartBarIconSolid,
   TrophyIcon as TrophyIconSolid,
-  CalendarDaysIcon as CalendarDaysIconSolid,
+  SparklesIcon as SparklesIconSolid,
 } from '@heroicons/react/24/solid'
 
 const tabs = [
-  { to: '/', label: 'Today', Icon: HomeIcon, IconActive: HomeIconSolid },
-  { to: '/workout', label: 'Workout', Icon: BoltIcon, IconActive: BoltIconSolid },
-  { to: '/nutrition', label: 'Nutrition', Icon: ChartBarIcon, IconActive: ChartBarIconSolid },
-  { to: '/progress', label: 'Progress', Icon: TrophyIcon, IconActive: TrophyIconSolid },
-  { to: '/program', label: 'Program', Icon: CalendarDaysIcon, IconActive: CalendarDaysIconSolid },
+  { to: '/',          label: 'Today',    Icon: HomeIcon,      IconActive: HomeIconSolid      },
+  { to: '/workout',   label: 'Workout',  Icon: BoltIcon,      IconActive: BoltIconSolid      },
+  { to: '/nutrition', label: 'Nutrition',Icon: ChartBarIcon,  IconActive: ChartBarIconSolid  },
+  { to: '/progress',  label: 'Progress', Icon: TrophyIcon,    IconActive: TrophyIconSolid    },
+  { to: '/life',      label: 'Life',     Icon: SparklesIcon,  IconActive: SparklesIconSolid  },
 ]
 
 export function BottomNav() {

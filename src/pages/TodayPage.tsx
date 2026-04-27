@@ -20,6 +20,7 @@ import {
   EVENING_SUPPLEMENTS,
 } from '../data/supplements'
 import { OuraCard } from '../components/today/OuraCard'
+import { useHabits } from '../hooks/useHabits'
 import { SLOT_TO_MEAL_ID } from '../data/mealLibrary'
 import type { MealPreset } from '../data/mealLibrary'
 import { ScaleIcon, Cog6ToothIcon, XMarkIcon } from '@heroicons/react/24/outline'
@@ -64,6 +65,7 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
   const { latestWeight, metrics, addWeightEntry } = useBodyMetrics()
   const { settings } = useSettings()
   const { isChecked, toggleItem, checkAll, isCheatDay, toggleCheatDay } = useDailyAgenda()
+  const { doneCount: habitsDone, totalCount: habitsTotal, northStar } = useHabits()
   const [weightInput, setWeightInput] = useState('')
 
   const today = new Date().toISOString().split('T')[0]
@@ -269,6 +271,30 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
           </div>
         </div>
       )}
+
+      {/* Life habits summary */}
+      <button
+        onClick={() => navigate('/life')}
+        className="w-full bg-surface-800 rounded-2xl px-4 py-3 flex items-center justify-between"
+      >
+        <div className="text-left">
+          <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Life Habits</p>
+          {northStar ? (
+            <p className="text-xs text-slate-500 mt-0.5 truncate max-w-[200px]">🎯 {northStar}</p>
+          ) : (
+            <p className="text-xs text-slate-600 mt-0.5">Tap to set your North Star</p>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="text-right">
+            <p className={`text-sm font-bold ${habitsDone === habitsTotal ? 'text-success' : 'text-slate-300'}`}>
+              {habitsDone}/{habitsTotal}
+            </p>
+            <p className="text-[10px] text-slate-600">today</p>
+          </div>
+          <span className="text-slate-600 text-sm">→</span>
+        </div>
+      </button>
 
       {/* Oura recovery card */}
       {settings.ouraToken && <OuraCard token={settings.ouraToken} />}
