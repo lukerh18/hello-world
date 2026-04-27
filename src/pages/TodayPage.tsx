@@ -120,14 +120,14 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
     dayName,
     workoutLabel: todayWorkout.isRest ? 'Rest Day' : todayWorkout.label,
     week,
-    phase,
+    phase: phase.label,
     weightLbs: latestWeight,
     daysToGoal,
   })
 
   const staticSummary = todayWorkout.isRest
-    ? `Rest day · Week ${week} ${phase} phase · ${lbsToGoal > 0 ? `${lbsToGoal} lbs to goal` : 'Goal reached'}`
-    : `${todayWorkout.label} · Week ${week} ${phase} phase · ${lbsToGoal > 0 ? `${lbsToGoal} lbs to goal` : 'Goal reached'}`
+    ? `Rest day · Week ${week} ${phase.label} phase · ${lbsToGoal > 0 ? `${lbsToGoal} lbs to goal` : 'Goal reached'}`
+    : `${todayWorkout.label} · Week ${week} ${phase.label} phase · ${lbsToGoal > 0 ? `${lbsToGoal} lbs to goal` : 'Goal reached'}`
 
   const handleLogMeal = (slot: { id: string; label: string }, preset: MealPreset) => {
     const mealId = SLOT_TO_MEAL_ID[slot.id] ?? 'snacks'
@@ -174,7 +174,7 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
 
       {/* Week + streak — single ambient line */}
       <p className="text-xs text-slate-600 -mt-2">
-        Week {week} · {phase} phase
+        Week {week} · {phase.label} phase
         {streak > 0 && (
           <span className="text-warn animate-streak-fire inline-block ml-2">🔥 {streak}-day streak</span>
         )}
