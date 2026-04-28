@@ -21,6 +21,25 @@ export interface CalendarEvent {
   summary: string
   start: string
   end: string
+  allDay: boolean
+  calendarName: string
+  calendarColor: string
+}
+
+interface TokenCache {
+  token: string
+  expiresAt: number
+}
+
+const TOKEN_KEY = 'gcal_token_v1'
+
+function readCachedToken(): TokenCache | null {
+  try {
+    const raw = localStorage.getItem(TOKEN_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as TokenCache
+    return parsed.expiresAt > Date.now() ? parsed : null
+  } catch { return null }
 }
 
 export interface FreeSlot {
@@ -54,10 +73,11 @@ function loadGisScript(): Promise<void> {
 }
 
 export function useGoogleCalendar(clientId: string) {
-  const [accessToken, setAccessToken] = useState<string | null>(null)
+  const [tokenCache, setTokenCache] = useState<TokenCache | null>(readCachedToken)
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const accessToken = tokenCache?.token ?? null
   const isConnected = Boolean(accessToken)
 
   const connect = useCallback(async () => {
@@ -74,7 +94,12 @@ export function useGoogleCalendar(clientId: string) {
           if (response.error) {
             setError(`Google auth failed: ${response.error}`)
           } else if (response.access_token) {
-            setAccessToken(response.access_token)
+            const cache: TokenCache = {
+              token: response.access_token,
+              expiresAt: Date.now() + (3600 - 60) * 1000,
+            }
+            localStorage.setItem(TOKEN_KEY, JSON.stringify(cache))
+            setTokenCache(cache)
           }
         },
       })
@@ -90,26 +115,49 @@ export function useGoogleCalendar(clientId: string) {
       const now = new Date()
       const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate())
       const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+      const headers = { Authorization: `Bearer ${token}` }
 
-      const url = new URL('https://www.googleapis.com/calendar/v3/calendars/primary/events')
-      url.searchParams.set('timeMin', startOfDay.toISOString())
-      url.searchParams.set('timeMax', endOfDay.toISOString())
-      url.searchParams.set('singleEvents', 'true')
-      url.searchParams.set('orderBy', 'startTime')
+      // Fetch all calendars
+      const listRes = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', { headers })
+      if (listRes.status === 401) {
+        localStorage.removeItem(TOKEN_KEY)
+        setTokenCache(null)
+        setError('Session expired — reconnect calendar')
+        return
+      }
+      if (!listRes.ok) throw new Error('Failed to fetch calendars')
+      const listData = await listRes.json()
+      const calendars: Array<{ id: string; summary: string; backgroundColor?: string }> = listData.items ?? []
 
-      const res = await fetch(url.toString(), {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      if (!res.ok) throw new Error('Failed to fetch calendar')
-      const data = await res.json()
-      setEvents(
-        (data.items ?? []).map((e: { id: string; summary: string; start: { dateTime: string }; end: { dateTime: string } }) => ({
-          id: e.id,
-          summary: e.summary ?? 'Busy',
-          start: e.start?.dateTime ?? '',
-          end: e.end?.dateTime ?? '',
-        }))
+      const allEvents: CalendarEvent[] = []
+      await Promise.all(
+        calendars.map(async (cal) => {
+          try {
+            const url = new URL(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events`)
+            url.searchParams.set('timeMin', startOfDay.toISOString())
+            url.searchParams.set('timeMax', endOfDay.toISOString())
+            url.searchParams.set('singleEvents', 'true')
+            url.searchParams.set('orderBy', 'startTime')
+            url.searchParams.set('maxResults', '25')
+            const res = await fetch(url.toString(), { headers })
+            if (!res.ok) return
+            const data = await res.json()
+            for (const e of data.items ?? []) {
+              allEvents.push({
+                id: e.id as string,
+                summary: (e.summary as string) ?? 'Busy',
+                start: (e.start?.dateTime || e.start?.date) as string,
+                end:   (e.end?.dateTime   || e.end?.date)   as string,
+                allDay: !e.start?.dateTime,
+                calendarName: cal.summary,
+                calendarColor: cal.backgroundColor ?? '#4285F4',
+              })
+            }
+          } catch { /* skip this calendar */ }
+        })
       )
+      allEvents.sort((a, b) => a.start.localeCompare(b.start))
+      setEvents(allEvents)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load calendar')
     } finally {
@@ -117,9 +165,21 @@ export function useGoogleCalendar(clientId: string) {
     }
   }, [])
 
+  // Auto-fetch on mount from persisted token
+  useEffect(() => {
+    const cached = readCachedToken()
+    if (cached) fetchTodayEvents(cached.token)
+  }, [fetchTodayEvents])
+
   useEffect(() => {
     if (accessToken) fetchTodayEvents(accessToken)
   }, [accessToken, fetchTodayEvents])
+
+  const disconnect = useCallback(() => {
+    localStorage.removeItem(TOKEN_KEY)
+    setTokenCache(null)
+    setEvents([])
+  }, [])
 
   const getFreeSlots = useCallback((): FreeSlot[] => {
     const now = new Date()
@@ -215,7 +275,7 @@ export function useGoogleCalendar(clientId: string) {
     [accessToken]
   )
 
-  return { isConnected, connect, events, getFreeSlots, getEveningSlots, addWorkoutEvent, loading, error }
+  return { isConnected, connect, disconnect, events, getFreeSlots, getEveningSlots, addWorkoutEvent, loading, error }
 }
 
 function formatSlot(start: Date, end: Date): string {
