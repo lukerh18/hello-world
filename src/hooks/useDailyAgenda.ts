@@ -16,7 +16,7 @@ export function useDailyAgenda() {
       .from('daily_agenda')
       .select('checked_ids, is_cheat_day')
       .eq('date', today)
-      .single()
+      .maybeSingle()
       .then(({ data }) => {
         if (data) {
           setCheckedIds((data as AgendaRow).checked_ids ?? [])

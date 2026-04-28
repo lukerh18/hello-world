@@ -275,7 +275,11 @@ export function useGoogleCalendar(clientId: string) {
     [accessToken]
   )
 
-  return { isConnected, connect, disconnect, events, getFreeSlots, getEveningSlots, addWorkoutEvent, loading, error }
+  const refresh = useCallback(() => {
+    if (accessToken) fetchTodayEvents(accessToken)
+  }, [accessToken, fetchTodayEvents])
+
+  return { isConnected, connect, disconnect, refresh, events, getFreeSlots, getEveningSlots, addWorkoutEvent, loading, error }
 }
 
 function formatSlot(start: Date, end: Date): string {
