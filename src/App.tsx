@@ -1,6 +1,18 @@
-import { useState, useEffect, Component } from 'react'
+import { Component } from 'react'
 import type { ReactNode } from 'react'
 import { HashRouter, Routes, Route } from 'react-router-dom'
+import { AuthProvider, useAuth } from './lib/auth'
+import { BottomNav } from './components/layout/BottomNav'
+import { SettingsModal } from './components/shared/SettingsModal'
+import { useState } from 'react'
+import LoginPage from './pages/LoginPage'
+import TodayPage from './pages/TodayPage'
+import WorkoutPage from './pages/WorkoutPage'
+import NutritionPage from './pages/NutritionPage'
+import ProgressPage from './pages/ProgressPage'
+import ProgramPage from './pages/ProgramPage'
+import HabitsPage from './pages/HabitsPage'
+import HealthPage from './pages/HealthPage'
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
   constructor(props: { children: ReactNode }) {
@@ -22,78 +34,46 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: string |
     return this.props.children
   }
 }
-import { BottomNav } from './components/layout/BottomNav'
-import { Modal } from './components/shared/Modal'
-import { Button } from './components/shared/Button'
-import { Input } from './components/shared/Input'
-import { SettingsModal } from './components/shared/SettingsModal'
-import TodayPage from './pages/TodayPage'
-import WorkoutPage from './pages/WorkoutPage'
-import NutritionPage from './pages/NutritionPage'
-import ProgressPage from './pages/ProgressPage'
-import ProgramPage from './pages/ProgramPage'
-import HabitsPage from './pages/HabitsPage'
 
-function OnboardingModal({ onComplete }: { onComplete: (date: string) => void }) {
-  const today = new Date().toISOString().split('T')[0]
-  const [date, setDate] = useState(today)
+function AuthGate() {
+  const { user, loading } = useAuth()
+  const [showSettings, setShowSettings] = useState(false)
+
+  if (loading) {
+    return (
+      <div className="min-h-dvh bg-surface-900 flex items-center justify-center">
+        <div className="text-slate-500 text-sm">Loading…</div>
+      </div>
+    )
+  }
+
+  if (!user) return <LoginPage />
 
   return (
-    <div className="space-y-4">
-      <p className="text-slate-300 text-sm">
-        Welcome, <span className="text-accent font-semibold">Luke</span>! Set your program start date
-        so your weekly targets and phase are calculated correctly.
-      </p>
-      <Input
-        label="Program Start Date"
-        type="date"
-        value={date}
-        onChange={(e) => setDate(e.target.value)}
-        max={today}
-      />
-      <Button fullWidth onClick={() => onComplete(date)} disabled={!date}>
-        Let's Go 🏋️
-      </Button>
+    <div className="min-h-dvh bg-surface-900 pb-20">
+      <Routes>
+        <Route path="/" element={<TodayPage onOpenSettings={() => setShowSettings(true)} />} />
+        <Route path="/workout" element={<WorkoutPage />} />
+        <Route path="/nutrition" element={<NutritionPage />} />
+        <Route path="/progress" element={<ProgressPage />} />
+        <Route path="/program" element={<ProgramPage />} />
+        <Route path="/life" element={<HabitsPage />} />
+        <Route path="/health" element={<HealthPage />} />
+      </Routes>
+      <BottomNav />
+      <SettingsModal open={showSettings} onClose={() => setShowSettings(false)} />
     </div>
   )
 }
 
 export default function App() {
-  const [startDate, setStartDate] = useState<string | null>(() =>
-    localStorage.getItem('program_start_date')
-  )
-  const [showOnboarding, setShowOnboarding] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
-
-  useEffect(() => {
-    if (!startDate) setShowOnboarding(true)
-  }, [startDate])
-
-  const handleOnboard = (date: string) => {
-    localStorage.setItem('program_start_date', date)
-    setStartDate(date)
-    setShowOnboarding(false)
-  }
-
   return (
     <ErrorBoundary>
-    <HashRouter>
-      <div className="min-h-dvh bg-surface-900 pb-20">
-        <Routes>
-          <Route path="/" element={<TodayPage onOpenSettings={() => setShowSettings(true)} />} />
-          <Route path="/workout" element={<WorkoutPage />} />
-          <Route path="/nutrition" element={<NutritionPage />} />
-          <Route path="/progress" element={<ProgressPage />} />
-          <Route path="/program" element={<ProgramPage />} />
-          <Route path="/life" element={<HabitsPage />} />
-        </Routes>
-        <BottomNav />
-      </div>
-      <Modal open={showOnboarding} onClose={() => {}} title="Welcome to FitTracker">
-        <OnboardingModal onComplete={handleOnboard} />
-      </Modal>
-      <SettingsModal open={showSettings} onClose={() => setShowSettings(false)} />
-    </HashRouter>
+      <AuthProvider>
+        <HashRouter>
+          <AuthGate />
+        </HashRouter>
+      </AuthProvider>
     </ErrorBoundary>
   )
 }

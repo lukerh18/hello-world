@@ -1,5 +1,5 @@
-import { useCallback } from 'react'
-import { useLocalStorage } from './useLocalStorage'
+import { useCallback, useState } from 'react'
+import { supabase } from '../lib/supabase'
 
 export interface OuraReadiness {
   score: number
@@ -35,16 +35,6 @@ interface OuraCache {
   fetchedAt: number
 }
 
-const CACHE_TTL = 30 * 60 * 1000
-
-async function fetchEndpoint<T>(endpoint: string, token: string, date: string): Promise<T | undefined> {
-  const url = `https://api.ouraring.com/v2/usercollection/${endpoint}?start_date=${date}&end_date=${date}`
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-  if (!res.ok) return undefined
-  const json = await res.json()
-  return (json.data ?? [])[0] as T | undefined
-}
-
 interface RawReadiness {
   score: number
   resting_heart_rate: number
@@ -66,8 +56,10 @@ interface RawActivity {
   steps: number
 }
 
+const CACHE_TTL = 30 * 60 * 1000
+
 export function useOuraData(token: string) {
-  const [cache, setCache] = useLocalStorage<OuraCache | null>('oura_daily_cache', null)
+  const [cache, setCache] = useState<OuraCache | null>(null)
 
   const today = new Date().toISOString().split('T')[0]
   const isStale = !cache || cache.date !== today || Date.now() - cache.fetchedAt > CACHE_TTL
@@ -75,12 +67,16 @@ export function useOuraData(token: string) {
   const refresh = useCallback(async () => {
     if (!token || !isStale) return
     try {
-      const [r, s, a] = await Promise.all([
-        fetchEndpoint<RawReadiness>('daily_readiness', token, today),
-        fetchEndpoint<RawSleep>('daily_sleep', token, today),
-        fetchEndpoint<RawActivity>('daily_activity', token, today),
-      ])
-      const data: OuraData = {
+      const { data, error } = await supabase.functions.invoke('oura-data', {
+        body: { date: today },
+      })
+      if (error || !data) return
+
+      const r = data.readiness as RawReadiness | null
+      const s = data.sleep as RawSleep | null
+      const a = data.activity as RawActivity | null
+
+      const ouraData: OuraData = {
         date: today,
         readiness: r
           ? {
@@ -101,11 +97,11 @@ export function useOuraData(token: string) {
           : undefined,
         activity: a ? { score: a.score, active_calories: a.active_calories, steps: a.steps } : undefined,
       }
-      setCache({ date: today, data, fetchedAt: Date.now() })
+      setCache({ date: today, data: ouraData, fetchedAt: Date.now() })
     } catch {
       // silent — show stale data if available
     }
-  }, [token, today, isStale, setCache])
+  }, [token, today, isStale])
 
   const data: OuraData = cache?.date === today ? cache.data : { date: today }
 

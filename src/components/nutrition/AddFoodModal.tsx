@@ -7,7 +7,8 @@ import type { Staple } from '../../hooks/useStaples'
 import { MEAL_PRESETS, getPresetsByCategory } from '../../data/mealLibrary'
 import type { MealPreset } from '../../data/mealLibrary'
 import type { FoodItem, Meal } from '../../types'
-import { TrashIcon, MagnifyingGlassIcon, PlusIcon } from '@heroicons/react/24/outline'
+import { TrashIcon, MagnifyingGlassIcon, PlusIcon, SparklesIcon } from '@heroicons/react/24/outline'
+import { supabase } from '../../lib/supabase'
 
 interface AddFoodModalProps {
   open: boolean
@@ -16,7 +17,16 @@ interface AddFoodModalProps {
   onAdd: (mealId: string, food: FoodItem) => void
 }
 
-type Tab = 'presets' | 'staples' | 'search' | 'manual'
+type Tab = 'ai' | 'presets' | 'staples' | 'search' | 'manual'
+
+interface ParsedFood {
+  name: string
+  calories: number
+  protein: number
+  carbs: number
+  fat: number
+  note?: string
+}
 
 interface USDAFood {
   fdcId: number
@@ -39,9 +49,15 @@ function foodFromStaple(staple: Staple): Omit<FoodItem, 'id'> {
 const PRESET_CATEGORIES = ['breakfast', 'lunch', 'dinner', 'snack', 'dessert'] as const
 
 export function AddFoodModal({ open, onClose, meals, onAdd }: AddFoodModalProps) {
-  const [tab, setTab] = useState<Tab>('presets')
+  const [tab, setTab] = useState<Tab>('ai')
   const [mealId, setMealId] = useState(meals[0]?.id ?? '')
   const { staples, addStaple, deleteStaple } = useStaples()
+
+  // AI tab
+  const [aiText, setAiText] = useState('')
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiResult, setAiResult] = useState<ParsedFood | null>(null)
+  const [aiError, setAiError] = useState<string | null>(null)
 
   // Presets
   const [presetCategory, setPresetCategory] = useState<typeof PRESET_CATEGORIES[number]>('breakfast')
@@ -70,7 +86,6 @@ export function AddFoodModal({ open, onClose, meals, onAdd }: AddFoodModalProps)
   const [carbs, setCarbs] = useState('')
   const [fat, setFat] = useState('')
 
-  // Keep mealId in sync when meals change
   useEffect(() => {
     if (meals.length > 0 && !meals.find((m) => m.id === mealId)) {
       setMealId(meals[0].id)
@@ -99,10 +114,12 @@ export function AddFoodModal({ open, onClose, meals, onAdd }: AddFoodModalProps)
 
   const resetManual = () => { setName(''); setCalories(''); setProtein(''); setCarbs(''); setFat('') }
   const resetStapleForm = () => { setSName(''); setSServing(''); setSCal(''); setSProt(''); setSCarbs(''); setSFat(''); setShowAddStaple(false) }
+  const resetAi = () => { setAiText(''); setAiResult(null); setAiError(null) }
 
   const handleClose = () => {
     resetManual()
     resetStapleForm()
+    resetAi()
     setQuery('')
     setSearchResults([])
     setSelectedFood(null)
@@ -113,6 +130,26 @@ export function AddFoodModal({ open, onClose, meals, onAdd }: AddFoodModalProps)
   const logFood = (food: Omit<FoodItem, 'id'>) => {
     onAdd(mealId, { ...food, id: crypto.randomUUID() })
     handleClose()
+  }
+
+  // AI parse
+  const handleAiParse = async () => {
+    if (!aiText.trim()) return
+    setAiLoading(true)
+    setAiResult(null)
+    setAiError(null)
+    try {
+      const { data, error } = await supabase.functions.invoke('parse-food-text', {
+        body: { text: aiText.trim() },
+      })
+      if (error) throw new Error(error.message)
+      if (data?.error) throw new Error(data.error)
+      setAiResult(data as ParsedFood)
+    } catch (e) {
+      setAiError(e instanceof Error ? e.message : 'Failed to parse food')
+    } finally {
+      setAiLoading(false)
+    }
   }
 
   const handleManualSubmit = () => {
@@ -141,11 +178,27 @@ export function AddFoodModal({ open, onClose, meals, onAdd }: AddFoodModalProps)
   }
 
   const tabs: { key: Tab; label: string }[] = [
+    { key: 'ai',      label: 'AI' },
     { key: 'presets', label: 'Presets' },
-    { key: 'staples', label: 'My Staples' },
-    { key: 'search', label: 'Search' },
-    { key: 'manual', label: 'Manual' },
+    { key: 'staples', label: 'Staples' },
+    { key: 'search',  label: 'Search' },
+    { key: 'manual',  label: 'Manual' },
   ]
+
+  const MacroRow = ({ food }: { food: ParsedFood }) => (
+    <div className="bg-surface-700 rounded-xl p-3 space-y-2">
+      <p className="text-sm font-semibold text-slate-100">{food.name}</p>
+      {food.note && <p className="text-xs text-slate-500 italic">{food.note}</p>}
+      <div className="grid grid-cols-4 gap-1 text-xs text-center">
+        {([['Cal', food.calories, 'text-slate-100'], ['P', food.protein, 'text-blue-400'], ['C', food.carbs, 'text-accent'], ['F', food.fat, 'text-warn']] as [string, number, string][]).map(([label, val, color]) => (
+          <div key={label} className="bg-surface-600 rounded-lg py-1.5">
+            <p className="text-slate-500">{label}</p>
+            <p className={`font-semibold ${color}`}>{val}{label !== 'Cal' ? 'g' : ''}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 
   const MealSelect = () => (
     <div className="mb-3">
@@ -181,6 +234,62 @@ export function AddFoodModal({ open, onClose, meals, onAdd }: AddFoodModalProps)
             </button>
           ))}
         </div>
+
+        {/* ── AI ──────────────────────────────────────────────────────── */}
+        {tab === 'ai' && (
+          <div className="space-y-3">
+            <div className="relative">
+              <textarea
+                value={aiText}
+                onChange={(e) => { setAiText(e.target.value); setAiResult(null); setAiError(null) }}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAiParse() } }}
+                placeholder="Describe what you ate…&#10;e.g. 2 scrambled eggs, slice of cheddar, whole wheat toast with butter"
+                rows={3}
+                className="w-full bg-surface-700 border border-surface-600 rounded-xl px-3 py-2.5 text-sm text-slate-100 placeholder-slate-600 resize-none focus:outline-none focus:border-accent leading-relaxed"
+              />
+            </div>
+
+            {!aiResult && (
+              <Button
+                fullWidth
+                onClick={handleAiParse}
+                disabled={!aiText.trim() || aiLoading}
+              >
+                {aiLoading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <SparklesIcon className="w-4 h-4 animate-pulse" /> Estimating…
+                  </span>
+                ) : (
+                  <span className="flex items-center justify-center gap-2">
+                    <SparklesIcon className="w-4 h-4" /> Estimate Macros
+                  </span>
+                )}
+              </Button>
+            )}
+
+            {aiError && (
+              <p className="text-xs text-danger text-center">{aiError}</p>
+            )}
+
+            {aiResult && (
+              <div className="space-y-2">
+                <MacroRow food={aiResult} />
+                <div className="flex gap-2">
+                  <Button variant="secondary" fullWidth onClick={resetAi}>
+                    Try again
+                  </Button>
+                  <Button fullWidth onClick={() => logFood({ name: aiResult.name, calories: aiResult.calories, protein: aiResult.protein, carbs: aiResult.carbs, fat: aiResult.fat })}>
+                    Log it
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <p className="text-[10px] text-slate-600 text-center">
+              Powered by Claude Haiku · estimates based on standard portions
+            </p>
+          </div>
+        )}
 
         {/* ── Presets ─────────────────────────────────────────────────── */}
         {tab === 'presets' && (
@@ -308,7 +417,7 @@ export function AddFoodModal({ open, onClose, meals, onAdd }: AddFoodModalProps)
               <div className="space-y-2 pt-1 border-t border-surface-600">
                 <p className="text-sm font-semibold text-slate-100 truncate">{selectedFood.description}</p>
                 <div className="text-xs text-slate-400 grid grid-cols-4 gap-1">
-                  {[['Cal', getNutrient(selectedFood, 1008)], ['Prot', getNutrient(selectedFood, 1003)], ['Carbs', getNutrient(selectedFood, 1005)], ['Fat', getNutrient(selectedFood, 1004)]].map(([label, val]) => (
+                  {([['Cal', getNutrient(selectedFood, 1008)], ['Prot', getNutrient(selectedFood, 1003)], ['Carbs', getNutrient(selectedFood, 1005)], ['Fat', getNutrient(selectedFood, 1004)]] as [string, number][]).map(([label, val]) => (
                     <div key={label} className="bg-surface-700 rounded-lg px-2 py-1.5 text-center">
                       <p className="text-slate-500">{label}</p>
                       <p className="text-slate-100 font-semibold">{val}</p>

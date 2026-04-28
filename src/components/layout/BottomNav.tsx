@@ -5,6 +5,7 @@ import {
   ChartBarIcon,
   TrophyIcon,
   SparklesIcon,
+  HeartIcon,
 } from '@heroicons/react/24/outline'
 import {
   HomeIcon as HomeIconSolid,
@@ -12,6 +13,7 @@ import {
   ChartBarIcon as ChartBarIconSolid,
   TrophyIcon as TrophyIconSolid,
   SparklesIcon as SparklesIconSolid,
+  HeartIcon as HeartIconSolid,
 } from '@heroicons/react/24/solid'
 
 const tabs = [
@@ -20,6 +22,7 @@ const tabs = [
   { to: '/nutrition', label: 'Nutrition',Icon: ChartBarIcon,  IconActive: ChartBarIconSolid  },
   { to: '/progress',  label: 'Progress', Icon: TrophyIcon,    IconActive: TrophyIconSolid    },
   { to: '/life',      label: 'Life',     Icon: SparklesIcon,  IconActive: SparklesIconSolid  },
+  { to: '/health',    label: 'Health',   Icon: HeartIcon,     IconActive: HeartIconSolid     },
 ]
 
 export function BottomNav() {

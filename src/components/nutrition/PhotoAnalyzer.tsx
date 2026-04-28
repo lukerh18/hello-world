@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { CameraIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import { supabase } from '../../lib/supabase'
 import type { FoodItem } from '../../types'
 
 interface ParsedFood {
@@ -14,7 +15,6 @@ interface ParsedFood {
 type MealId = 'breakfast' | 'lunch' | 'snack' | 'dinner'
 
 interface PhotoAnalyzerProps {
-  apiKey: string
   onFoodParsed: (food: Omit<FoodItem, 'id'>, mealId: MealId) => void
 }
 
@@ -34,7 +34,7 @@ function resizeImage(file: File, maxPx = 800): Promise<string> {
   })
 }
 
-export function PhotoAnalyzer({ apiKey, onFoodParsed }: PhotoAnalyzerProps) {
+export function PhotoAnalyzer({ onFoodParsed }: PhotoAnalyzerProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -56,39 +56,12 @@ export function PhotoAnalyzer({ apiKey, onFoodParsed }: PhotoAnalyzerProps) {
     setLoading(true)
     try {
       const base64 = await resizeImage(file)
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true',
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 256,
-          messages: [
-            {
-              role: 'user',
-              content: [
-                { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64 } },
-                {
-                  type: 'text',
-                  text: 'Identify this food. Respond ONLY with valid JSON, no markdown: {"name":"...","calories":0,"protein":0,"carbs":0,"fat":0,"serving":"..."}',
-                },
-              ],
-            },
-          ],
-        }),
+      const { data, error: fnErr } = await supabase.functions.invoke('analyze-food-photo', {
+        body: { base64 },
       })
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        throw new Error((body as { error?: { message?: string } }).error?.message ?? `API error ${res.status}`)
-      }
-      const data = await res.json()
-      const text: string = data.content?.[0]?.text ?? ''
-      const food: ParsedFood = JSON.parse(text)
-      setParsed(food)
+      if (fnErr) throw new Error(fnErr.message)
+      if (data?.error) throw new Error(data.error)
+      setParsed(data as ParsedFood)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to analyze photo')
     } finally {
@@ -99,13 +72,7 @@ export function PhotoAnalyzer({ apiKey, onFoodParsed }: PhotoAnalyzerProps) {
   const handleConfirm = () => {
     if (!parsed) return
     onFoodParsed(
-      {
-        name: parsed.name,
-        calories: parsed.calories,
-        protein: parsed.protein,
-        carbs: parsed.carbs,
-        fat: parsed.fat,
-      },
+      { name: parsed.name, calories: parsed.calories, protein: parsed.protein, carbs: parsed.carbs, fat: parsed.fat },
       selectedMeal
     )
     setPreview(null)
@@ -153,11 +120,7 @@ export function PhotoAnalyzer({ apiKey, onFoodParsed }: PhotoAnalyzerProps) {
             </div>
 
             {preview && (
-              <img
-                src={preview}
-                alt="Food preview"
-                className="w-full h-40 object-cover rounded-xl"
-              />
+              <img src={preview} alt="Food preview" className="w-full h-40 object-cover rounded-xl" />
             )}
 
             {loading && (
@@ -189,9 +152,7 @@ export function PhotoAnalyzer({ apiKey, onFoodParsed }: PhotoAnalyzerProps) {
                         key={m.value}
                         onClick={() => setSelectedMeal(m.value)}
                         className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                          selectedMeal === m.value
-                            ? 'bg-accent text-white'
-                            : 'bg-surface-700 text-slate-400'
+                          selectedMeal === m.value ? 'bg-accent text-white' : 'bg-surface-700 text-slate-400'
                         }`}
                       >
                         {m.label}

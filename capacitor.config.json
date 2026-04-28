@@ -1,0 +1,8 @@
+{
+  "appId": "com.lukehenry.lifetracker",
+  "appName": "Luke's Life Tracker",
+  "webDir": "dist",
+  "ios": {
+    "contentInset": "automatic"
+  }
+}

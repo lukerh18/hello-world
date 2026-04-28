@@ -190,9 +190,7 @@ export default function NutritionPage() {
         <>
           {/* Photo analyzer + Add Food row */}
           <div className="flex items-center gap-2">
-            {settings.anthropicApiKey && (
-              <PhotoAnalyzer apiKey={settings.anthropicApiKey} onFoodParsed={handlePhotoFood} />
-            )}
+            <PhotoAnalyzer onFoodParsed={handlePhotoFood} />
             <div className="flex-1">
               <Button
                 fullWidth

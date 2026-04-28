@@ -3,7 +3,8 @@ import { Modal } from './Modal'
 import { Input } from './Input'
 import { Button } from './Button'
 import { useSettings } from '../../hooks/useSettings'
-import { KeyIcon, CalendarIcon, CheckCircleIcon, HeartIcon, SparklesIcon } from '@heroicons/react/24/outline'
+import { CalendarIcon, CheckCircleIcon, HeartIcon, SparklesIcon } from '@heroicons/react/24/outline'
+import { useAuth } from '../../lib/auth'
 
 interface SettingsModalProps {
   open: boolean
@@ -11,25 +12,21 @@ interface SettingsModalProps {
 }
 
 export function SettingsModal({ open, onClose }: SettingsModalProps) {
-  const { settings, updateSettings, hasApiKey, hasGoogleClientId, hasHealthContext } = useSettings()
-  const [apiKey, setApiKey] = useState(settings.anthropicApiKey)
+  const { settings, updateSettings, hasGoogleClientId, hasHealthContext } = useSettings()
+  const { signOut } = useAuth()
   const [clientId, setClientId] = useState(settings.googleClientId)
   const [ouraToken, setOuraToken] = useState(settings.ouraToken)
   const [healthContext, setHealthContext] = useState(settings.healthContext)
-  const [programStart, setProgramStart] = useState(
-    settings.programStartDate || localStorage.getItem('program_start_date') || ''
-  )
+  const [programStart, setProgramStart] = useState(settings.programStartDate || '')
   const [saved, setSaved] = useState(false)
 
-  const handleSave = () => {
-    updateSettings({
-      anthropicApiKey: apiKey.trim(),
+  const handleSave = async () => {
+    await updateSettings({
       googleClientId: clientId.trim(),
       ouraToken: ouraToken.trim(),
       healthContext: healthContext.trim(),
       programStartDate: programStart,
     })
-    if (programStart) localStorage.setItem('program_start_date', programStart)
     setSaved(true)
     setTimeout(() => { setSaved(false); onClose() }, 1000)
   }
@@ -64,42 +61,15 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
             {hasHealthContext && <CheckCircleIcon className="w-4 h-4 text-success ml-auto" />}
           </div>
           <p className="text-xs text-slate-400">
-            Paste bloodwork, health diagnostics, or any relevant context. Used to personalize your AI coaching — stored only on this device.
+            Paste bloodwork, health diagnostics, or any relevant context. Used to personalize your AI coaching and Perplexity health answers.
           </p>
           <textarea
             value={healthContext}
             onChange={(e) => setHealthContext(e.target.value)}
             rows={6}
-            placeholder={`e.g. From Perplexity health diagnostic or bloodwork:\nTestosterone: 650 ng/dL\nVitamin D: 42 ng/mL\nHbA1c: 5.1%\nCortisol: 18 mcg/dL\nFerritin: 95 ng/mL`}
+            placeholder={`e.g. From bloodwork or health diagnostic:\nTestosterone: 650 ng/dL\nVitamin D: 42 ng/mL\nHbA1c: 5.1%\nCortisol: 18 mcg/dL\nFerritin: 95 ng/mL`}
             className="w-full bg-surface-700 border border-surface-600 rounded-xl px-3 py-2.5 text-xs text-slate-300 resize-none focus:outline-none focus:border-accent placeholder-slate-600 leading-relaxed"
           />
-        </section>
-
-        {/* Anthropic API Key */}
-        <section className="space-y-2">
-          <div className="flex items-center gap-2 mb-2">
-            <KeyIcon className="w-4 h-4 text-accent" />
-            <h3 className="text-sm font-semibold text-slate-200">Anthropic API Key</h3>
-            {hasApiKey && <CheckCircleIcon className="w-4 h-4 text-success ml-auto" />}
-          </div>
-          <p className="text-xs text-slate-400">
-            Powers AI food scanning, morning briefings, and weekly coaching reviews. Stored only on this device.
-          </p>
-          <Input
-            label="API Key"
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder="sk-ant-..."
-          />
-          <a
-            href="https://console.anthropic.com/settings/keys"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-accent hover:underline"
-          >
-            Get your API key at console.anthropic.com →
-          </a>
         </section>
 
         {/* Oura Ring */}
@@ -110,7 +80,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
             {ouraToken && <CheckCircleIcon className="w-4 h-4 text-success ml-auto" />}
           </div>
           <p className="text-xs text-slate-400">
-            Pulls sleep, readiness, HRV, and activity scores from your ring to personalize coaching. Stored only on this device.
+            Pulls sleep, readiness, HRV, and activity scores from your ring to personalize coaching.
           </p>
           <Input
             label="Personal Access Token"
@@ -137,7 +107,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
             {hasGoogleClientId && <CheckCircleIcon className="w-4 h-4 text-success ml-auto" />}
           </div>
           <p className="text-xs text-slate-400">
-            Shows your day's schedule, highlights soccer games and kids' activities, and suggests family workouts when your gym session is missed.
+            Shows your day's schedule, highlights soccer games and kids' activities.
           </p>
           <Input
             label="Google OAuth Client ID"
@@ -154,7 +124,7 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
               <li>Create a new project → Enable <span className="text-slate-300">Google Calendar API</span></li>
               <li>APIs &amp; Services → Credentials → <span className="text-slate-300">Create OAuth 2.0 Client ID</span></li>
               <li>Type: <span className="text-slate-300">Web Application</span></li>
-              <li>Authorized JavaScript origin: <span className="text-slate-300 break-all">https://lukerh18.github.io</span></li>
+              <li>Authorized JavaScript origin: your app's URL</li>
               <li>Copy the Client ID and paste it above</li>
             </ol>
           </details>
@@ -163,6 +133,15 @@ export function SettingsModal({ open, onClose }: SettingsModalProps) {
         <Button fullWidth onClick={handleSave} variant={saved ? 'secondary' : 'primary'}>
           {saved ? '✓ Saved!' : 'Save Settings'}
         </Button>
+
+        {/* Sign out */}
+        <button
+          onClick={signOut}
+          className="w-full text-center text-xs text-slate-600 hover:text-slate-400 transition-colors pt-2"
+        >
+          Sign out
+        </button>
+
       </div>
     </Modal>
   )

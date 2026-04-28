@@ -9,6 +9,7 @@ import { Button } from '../components/shared/Button'
 import { Input } from '../components/shared/Input'
 import { useBodyMetrics } from '../hooks/useBodyMetrics'
 import { useWorkoutLog } from '../hooks/useWorkoutLog'
+import { useNutritionLog } from '../hooks/useNutritionLog'
 import { useCurrentWeek } from '../hooks/useCurrentWeek'
 import { DEFAULT_USER_PROFILE } from '../data/userProfile'
 import { OVERLOAD_EXERCISE_NAMES } from '../data/progressiveOverload'
@@ -31,9 +32,10 @@ export default function ProgressPage() {
   const [selectedExercise, setSelectedExercise] = useState<OverloadKey>('chest-press')
 
   const { metrics, latestWeight, addWeightEntry, addMeasurements } = useBodyMetrics()
-  const { getLogsForExercise } = useWorkoutLog()
+  const { logs: workoutLogs, getLogsForExercise } = useWorkoutLog()
+  const { logs: nutritionLogs } = useNutritionLog()
   const { settings } = useSettings()
-  const startDate = localStorage.getItem('program_start_date') ?? new Date().toISOString().split('T')[0]
+  const startDate = settings.programStartDate || new Date().toISOString().split('T')[0]
   const { week, phase } = useCurrentWeek(startDate)
 
   const lbsToGoal = Math.max(0, latestWeight - DEFAULT_USER_PROFILE.goalWeightLbs)
@@ -53,7 +55,7 @@ export default function ProgressPage() {
   }).filter((d) => d.weight > 0)
 
   const handleExport = () => {
-    const text = generateProgressExport()
+    const text = generateProgressExport({ startDate, metrics, workoutLogs, nutritionLogs })
     setExportText(text)
     setShowExportModal(true)
     setCopied(false)
@@ -262,7 +264,6 @@ export default function ProgressPage() {
       {tab === 'coach' && (
         <div className="space-y-4">
           <WeeklyReview
-            apiKey={settings.anthropicApiKey}
             healthContext={settings.healthContext}
             weekNumber={week}
             phase={phase}

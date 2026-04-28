@@ -1,5 +1,10 @@
+import { useEffect } from 'react'
 import { SparklesIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
 import { useWeeklyReview } from '../../hooks/useWeeklyReview'
+import { useBodyMetrics } from '../../hooks/useBodyMetrics'
+import { useWorkoutLog } from '../../hooks/useWorkoutLog'
+import { useNutritionLog } from '../../hooks/useNutritionLog'
+import { useSettings } from '../../hooks/useSettings'
 
 interface SectionConfig {
   title: string
@@ -9,10 +14,10 @@ interface SectionConfig {
 }
 
 const SECTION_STYLES: Record<string, SectionConfig> = {
-  "What's Working":       { title: "What's Working",       color: 'text-success',    bg: 'bg-success/10',    border: 'border-success/25' },
-  "Needs Attention":      { title: "Needs Attention",       color: 'text-warn',       bg: 'bg-warn/10',       border: 'border-warn/25' },
-  "This Week's Priority": { title: "This Week's Priority",  color: 'text-accent',     bg: 'bg-accent/10',     border: 'border-accent/25' },
-  "Science-Based Insight":{ title: "Science-Based Insight", color: 'text-blue-400',   bg: 'bg-blue-400/10',   border: 'border-blue-400/25' },
+  "What's Working":        { title: "What's Working",        color: 'text-success',   bg: 'bg-success/10',   border: 'border-success/25' },
+  "Needs Attention":       { title: "Needs Attention",        color: 'text-warn',      bg: 'bg-warn/10',      border: 'border-warn/25' },
+  "This Week's Priority":  { title: "This Week's Priority",   color: 'text-accent',    bg: 'bg-accent/10',    border: 'border-accent/25' },
+  "Science-Based Insight": { title: "Science-Based Insight",  color: 'text-blue-400',  bg: 'bg-blue-400/10',  border: 'border-blue-400/25' },
 }
 
 function parseReview(text: string): { title: string; content: string }[] {
@@ -27,36 +32,35 @@ function parseReview(text: string): { title: string; content: string }[] {
 }
 
 interface WeeklyReviewProps {
-  apiKey: string
   healthContext: string
   weekNumber: number
   phase: string
   latestWeight: number
 }
 
-export function WeeklyReview({ apiKey, healthContext, weekNumber, phase, latestWeight }: WeeklyReviewProps) {
-  const { review, generatedAt, loading, error, generate } = useWeeklyReview(
-    apiKey, healthContext, weekNumber, phase, latestWeight
+export function WeeklyReview({ healthContext, weekNumber, phase, latestWeight }: WeeklyReviewProps) {
+  const { metrics } = useBodyMetrics()
+  const { logs: workoutLogs } = useWorkoutLog()
+  const { logs: nutritionLogs } = useNutritionLog()
+  const { settings } = useSettings()
+
+  const { review, generatedAt, loading, error, generate, loadCache } = useWeeklyReview(
+    healthContext, weekNumber, phase, latestWeight, metrics, workoutLogs, nutritionLogs
   )
+
+  useEffect(() => { loadCache() }, [loadCache])
 
   const sections = review ? parseReview(review) : []
   const generatedLabel = generatedAt
     ? new Date(generatedAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
     : null
 
-  if (!apiKey) {
-    return (
-      <div className="bg-surface-800 rounded-2xl border border-surface-600 p-6 text-center space-y-3">
-        <SparklesIcon className="w-8 h-8 text-slate-600 mx-auto" />
-        <p className="text-sm font-semibold text-slate-300">Weekly AI Coaching Review</p>
-        <p className="text-xs text-slate-500">Add your Anthropic API key in Settings (⚙) to unlock personalized weekly coaching.</p>
-      </div>
-    )
-  }
+  // Weekly review now runs via edge function — no client-side key required.
+  // Show prompt if the edge function secret is not yet configured (API returns an error in that case).
+  const _ = settings // imported for potential future per-user key override
 
   return (
     <div className="space-y-3">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <SparklesIcon className="w-4 h-4 text-accent" />

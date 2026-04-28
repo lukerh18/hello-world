@@ -7,6 +7,7 @@ import { Button } from '../components/shared/Button'
 import { EmptyState } from '../components/shared/EmptyState'
 import { useCurrentWeek } from '../hooks/useCurrentWeek'
 import { useWorkoutLog } from '../hooks/useWorkoutLog'
+import { useSettings } from '../hooks/useSettings'
 import { getWorkoutForDay } from '../data/program'
 import { getTargetWeight } from '../data/progressiveOverload'
 import type { ExerciseLog, WorkoutLog, DayOfWeek } from '../types'
@@ -54,7 +55,8 @@ export default function WorkoutPage() {
   const today = new Date().toISOString().split('T')[0]
   const date = dateParam ?? today
 
-  const startDate = localStorage.getItem('program_start_date') ?? today
+  const { settings } = useSettings()
+  const startDate = settings.programStartDate || today
   const { week, phase } = useCurrentWeek(startDate)
   const { upsertLog, getLogByDate } = useWorkoutLog()
 
@@ -110,7 +112,7 @@ export default function WorkoutPage() {
   const saveLog = useCallback(
     (completed: boolean) => {
       const log: WorkoutLog = {
-        id: date,
+        id: existingLog?.id ?? crypto.randomUUID(),
         date,
         dayOfWeek,
         phase: phase.phase,

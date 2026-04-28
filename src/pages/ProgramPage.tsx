@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { PhaseChip } from '../components/workout/PhaseChip'
 import { useCurrentWeek } from '../hooks/useCurrentWeek'
+import { useSettings } from '../hooks/useSettings'
 import { WORKOUT_SCHEDULE, PHASE_CONFIGS, getPhaseForWeek } from '../data/program'
 import { OVERLOAD_TABLE, OVERLOAD_EXERCISE_NAMES } from '../data/progressiveOverload'
 import type { OverloadKey } from '../types'
@@ -18,7 +19,8 @@ const DAY_LABELS: Record<string, string> = {
 }
 
 export default function ProgramPage() {
-  const startDate = localStorage.getItem('program_start_date') ?? new Date().toISOString().split('T')[0]
+  const { settings } = useSettings()
+  const startDate = settings.programStartDate || new Date().toISOString().split('T')[0]
   const { week: currentWeek, phase: currentPhase } = useCurrentWeek(startDate)
   const [selectedWeek, setSelectedWeek] = useState(currentWeek)
   const [expandedDay, setExpandedDay] = useState<string | null>(null)

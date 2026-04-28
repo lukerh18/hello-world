@@ -2,19 +2,16 @@ import { NUTRITION_TARGETS } from '../data/userProfile'
 import { OVERLOAD_EXERCISE_NAMES } from '../data/progressiveOverload'
 import type { DailyNutrition, WorkoutLog, BodyMetrics, OverloadKey } from '../types'
 
-export function generateProgressExport(): string {
+interface ExportInput {
+  startDate: string
+  metrics: BodyMetrics
+  workoutLogs: WorkoutLog[]
+  nutritionLogs: DailyNutrition[]
+}
+
+export function generateProgressExport(input: ExportInput): string {
+  const { startDate, metrics, workoutLogs, nutritionLogs } = input
   const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-  const startDate = localStorage.getItem('program_start_date') ?? ''
-
-  let metrics: BodyMetrics = { weightLog: [], measurements: [] }
-  let workoutLogs: WorkoutLog[] = []
-  let nutritionLogs: DailyNutrition[] = []
-
-  try {
-    metrics = JSON.parse(localStorage.getItem('body_metrics') ?? '{"weightLog":[],"measurements":[]}')
-    workoutLogs = JSON.parse(localStorage.getItem('workout_logs') ?? '[]')
-    nutritionLogs = JSON.parse(localStorage.getItem('nutrition_logs') ?? '[]')
-  } catch { /* use defaults */ }
 
   const weekNumber = startDate
     ? Math.max(1, Math.min(12, Math.ceil((Date.now() - new Date(startDate).getTime()) / (7 * 86400000))))
@@ -26,19 +23,16 @@ export function generateProgressExport(): string {
 
   const lines: string[] = []
 
-  // ── Header ────────────────────────────────────────────────────────────────────
   lines.push(`# Luke's Fitness Progress Report`)
   lines.push(`*Generated ${today}*`)
   lines.push('')
 
-  // ── Current status ────────────────────────────────────────────────────────────
   lines.push('## Current Program Status')
   lines.push(`- Week ${weekNumber} of 12`)
   lines.push(`- Weight: ${latestWeight} lbs (started 196 lbs, goal 185 lbs)`)
   lines.push(`- Lost: ${lbsLost >= 0 ? lbsLost.toFixed(1) : '0'} lbs · Remaining: ${lbsToGoal} lbs · Target: July 2026`)
   lines.push('')
 
-  // ── Weight log ────────────────────────────────────────────────────────────────
   if (metrics.weightLog.length > 0) {
     lines.push('## Weight History (most recent first)')
     metrics.weightLog
@@ -51,7 +45,6 @@ export function generateProgressExport(): string {
     lines.push('')
   }
 
-  // ── Recent workouts ───────────────────────────────────────────────────────────
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - 28)
   const recentWorkouts = workoutLogs
@@ -77,7 +70,6 @@ export function generateProgressExport(): string {
     lines.push('')
   }
 
-  // ── Strength PRs ──────────────────────────────────────────────────────────────
   const trackedKeys = Object.keys(OVERLOAD_EXERCISE_NAMES) as OverloadKey[]
   const prLines: string[] = []
 
@@ -98,7 +90,6 @@ export function generateProgressExport(): string {
     lines.push('')
   }
 
-  // ── Nutrition averages ────────────────────────────────────────────────────────
   const sevenDaysAgo = new Date()
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
   const recentNutrition = nutritionLogs.filter((n) => new Date(n.date + 'T12:00:00') >= sevenDaysAgo)
@@ -123,7 +114,6 @@ export function generateProgressExport(): string {
     lines.push('')
   }
 
-  // ── AI coaching prompt ────────────────────────────────────────────────────────
   lines.push('## Context for AI Coach')
   lines.push(`12-week Push/Pull/Legs progressive overload program. Equipment: Tonal, kettlebells, treadmill, bike.`)
   lines.push(`Luke is 6'2", started at 196 lbs, goal is 185 lbs by July 2026. Currently Week ${weekNumber}, ${latestWeight} lbs.`)

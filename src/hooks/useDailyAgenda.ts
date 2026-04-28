@@ -1,62 +1,66 @@
-import { useCallback } from 'react'
-import { useLocalStorage } from './useLocalStorage'
+import { useState, useEffect, useCallback } from 'react'
+import { supabase } from '../lib/supabase'
 
-interface DailyAgendaState {
-  date: string
-  checkedIds: string[]
-  isCheatDay: boolean
+interface AgendaRow {
+  checked_ids: string[]
+  is_cheat_day: boolean
 }
-
-const EMPTY: DailyAgendaState = { date: '', checkedIds: [], isCheatDay: false }
 
 export function useDailyAgenda() {
   const today = new Date().toISOString().split('T')[0]
-  const [stored, setStored] = useLocalStorage<DailyAgendaState>('daily_agenda_v1', EMPTY)
+  const [checkedIds, setCheckedIds] = useState<string[]>([])
+  const [isCheatDay, setIsCheatDay] = useState(false)
 
-  // Auto-reset on new day
-  const state: DailyAgendaState = stored.date === today ? stored : { ...EMPTY, date: today }
-
-  const save = useCallback(
-    (updater: (prev: DailyAgendaState) => DailyAgendaState) => {
-      setStored((prev) => {
-        const current = prev.date === today ? prev : { ...EMPTY, date: today }
-        return updater(current)
-      })
-    },
-    [today, setStored]
-  )
-
-  const toggleItem = useCallback(
-    (id: string) => {
-      save((cur) => {
-        const has = cur.checkedIds.includes(id)
-        return {
-          ...cur,
-          checkedIds: has ? cur.checkedIds.filter((i) => i !== id) : [...cur.checkedIds, id],
+  useEffect(() => {
+    supabase
+      .from('daily_agenda')
+      .select('checked_ids, is_cheat_day')
+      .eq('date', today)
+      .single()
+      .then(({ data }) => {
+        if (data) {
+          setCheckedIds((data as AgendaRow).checked_ids ?? [])
+          setIsCheatDay((data as AgendaRow).is_cheat_day ?? false)
         }
       })
-    },
-    [save]
-  )
+  }, [today])
 
-  const checkAll = useCallback(
-    (ids: string[]) => {
-      save((cur) => ({
-        ...cur,
-        checkedIds: [...new Set([...cur.checkedIds, ...ids])],
-      }))
-    },
-    [save]
-  )
+  const upsert = useCallback(async (ids: string[], cheat: boolean) => {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    await supabase.from('daily_agenda').upsert(
+      { user_id: user.id, date: today, checked_ids: ids, is_cheat_day: cheat, updated_at: new Date().toISOString() },
+      { onConflict: 'user_id,date' }
+    )
+  }, [today])
+
+  const toggleItem = useCallback((id: string) => {
+    setCheckedIds((prev) => {
+      const next = prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+      upsert(next, isCheatDay)
+      return next
+    })
+  }, [isCheatDay, upsert])
+
+  const checkAll = useCallback((ids: string[]) => {
+    setCheckedIds((prev) => {
+      const next = [...new Set([...prev, ...ids])]
+      upsert(next, isCheatDay)
+      return next
+    })
+  }, [isCheatDay, upsert])
 
   const toggleCheatDay = useCallback(() => {
-    save((cur) => ({ ...cur, isCheatDay: !cur.isCheatDay }))
-  }, [save])
+    setIsCheatDay((prev) => {
+      upsert(checkedIds, !prev)
+      return !prev
+    })
+  }, [checkedIds, upsert])
 
   return {
-    checkedIds: state.checkedIds,
-    isCheatDay: state.isCheatDay,
-    isChecked: (id: string) => state.checkedIds.includes(id),
+    checkedIds,
+    isCheatDay,
+    isChecked: (id: string) => checkedIds.includes(id),
     toggleItem,
     checkAll,
     toggleCheatDay,
