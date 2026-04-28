@@ -10,14 +10,22 @@ const DEFAULT_MEALS: Meal[] = [
   { id: 'snacks',    name: 'Snacks',    foods: [] },
 ]
 
+const LS_KEY = 'nutrition_logs_v1'
+
+function lsRead(): DailyNutrition[] {
+  try { return JSON.parse(localStorage.getItem(LS_KEY) ?? '[]') as DailyNutrition[] }
+  catch { return [] }
+}
+
 export function useNutritionLog() {
-  const { user } = useAuth()
-  const [logs, setLogs] = useState<DailyNutrition[]>([])
-  const [loading, setLoading] = useState(true)
+  const { user, isLocal } = useAuth()
+  const [logs, setLogs] = useState<DailyNutrition[]>(isLocal ? lsRead() : [])
+  const [loading, setLoading] = useState(!isLocal)
 
   const today = new Date().toISOString().split('T')[0]
 
   useEffect(() => {
+    if (isLocal) return
     if (!user) { setLogs([]); setLoading(false); return }
 
     supabase
@@ -29,7 +37,7 @@ export function useNutritionLog() {
         setLogs((data ?? []).map(rowToEntry))
         setLoading(false)
       })
-  }, [user])
+  }, [user, isLocal])
 
   const getByDate = useCallback(
     (date: string): DailyNutrition =>
@@ -39,43 +47,43 @@ export function useNutritionLog() {
 
   const getTodayNutrition = useCallback(() => getByDate(today), [getByDate, today])
 
-  const upsertDay = useCallback(async (entry: DailyNutrition) => {
-    if (!user) return
-    const { data } = await supabase
-      .from('nutrition_logs')
-      .upsert({ user_id: user.id, date: entry.date, meals: entry.meals, water_oz: entry.waterOz }, { onConflict: 'user_id,date' })
-      .select()
-      .single()
-    if (data) {
-      setLogs((prev) => {
-        const idx = prev.findIndex((l) => l.date === entry.date)
-        const updated = rowToEntry(data)
-        if (idx >= 0) { const next = [...prev]; next[idx] = updated; return next }
-        return [updated, ...prev]
-      })
+  const upsertDay = useCallback((entry: DailyNutrition) => {
+    setLogs((prev) => {
+      const idx = prev.findIndex((l) => l.date === entry.date)
+      const next = idx >= 0
+        ? prev.map((l, i) => i === idx ? entry : l)
+        : [entry, ...prev]
+      if (isLocal) localStorage.setItem(LS_KEY, JSON.stringify(next.slice(0, 90)))
+      return next
+    })
+    if (!isLocal && user) {
+      supabase.from('nutrition_logs').upsert(
+        { user_id: user.id, date: entry.date, meals: entry.meals, water_oz: entry.waterOz },
+        { onConflict: 'user_id,date' }
+      )
     }
-  }, [user])
+  }, [user, isLocal])
 
-  const addFood = useCallback(async (date: string, mealId: string, food: FoodItem) => {
+  const addFood = useCallback((date: string, mealId: string, food: FoodItem) => {
     const entry = getByDate(date)
     const meals = entry.meals.map((m) => m.id === mealId ? { ...m, foods: [...m.foods, food] } : m)
-    await upsertDay({ ...entry, meals })
+    upsertDay({ ...entry, meals })
   }, [getByDate, upsertDay])
 
-  const deleteFood = useCallback(async (date: string, mealId: string, foodId: string) => {
+  const deleteFood = useCallback((date: string, mealId: string, foodId: string) => {
     const entry = getByDate(date)
     const meals = entry.meals.map((m) => m.id === mealId ? { ...m, foods: m.foods.filter((f) => f.id !== foodId) } : m)
-    await upsertDay({ ...entry, meals })
+    upsertDay({ ...entry, meals })
   }, [getByDate, upsertDay])
 
-  const updateWater = useCallback(async (date: string, oz: number) => {
+  const updateWater = useCallback((date: string, oz: number) => {
     const entry = getByDate(date)
-    await upsertDay({ ...entry, waterOz: Math.max(0, oz) })
+    upsertDay({ ...entry, waterOz: Math.max(0, oz) })
   }, [getByDate, upsertDay])
 
-  const addMeal = useCallback(async (date: string, meal: Meal) => {
+  const addMeal = useCallback((date: string, meal: Meal) => {
     const entry = getByDate(date)
-    await upsertDay({ ...entry, meals: [...entry.meals, meal] })
+    upsertDay({ ...entry, meals: [...entry.meals, meal] })
   }, [getByDate, upsertDay])
 
   const getDayTotals = useCallback((date: string): MacroTotals => {

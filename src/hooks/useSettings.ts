@@ -16,12 +16,22 @@ const DEFAULT_SETTINGS: AppSettings = {
   programStartDate: '',
 }
 
+const LS_KEY = 'app_settings_v1'
+
+function lsRead(): AppSettings {
+  try {
+    const raw = localStorage.getItem(LS_KEY)
+    return raw ? { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<AppSettings>) } : DEFAULT_SETTINGS
+  } catch { return DEFAULT_SETTINGS }
+}
+
 export function useSettings() {
-  const { user } = useAuth()
-  const [settings, setSettingsState] = useState<AppSettings>(DEFAULT_SETTINGS)
-  const [loading, setLoading] = useState(true)
+  const { user, isLocal } = useAuth()
+  const [settings, setSettingsState] = useState<AppSettings>(isLocal ? lsRead() : DEFAULT_SETTINGS)
+  const [loading, setLoading] = useState(!isLocal)
 
   useEffect(() => {
+    if (isLocal) return
     if (!user) { setLoading(false); return }
 
     supabase
@@ -40,11 +50,16 @@ export function useSettings() {
         }
         setLoading(false)
       })
-  }, [user])
+  }, [user, isLocal])
 
   const updateSettings = useCallback(async (updates: Partial<AppSettings>) => {
-    if (!user) return
     const merged = { ...settings, ...updates }
+    setSettingsState(merged)
+    if (isLocal) {
+      localStorage.setItem(LS_KEY, JSON.stringify(merged))
+      return
+    }
+    if (!user) return
     await supabase.from('profiles').upsert({
       id: user.id,
       google_client_id: merged.googleClientId || null,
@@ -52,8 +67,7 @@ export function useSettings() {
       health_context: merged.healthContext || null,
       program_start_date: merged.programStartDate || null,
     }, { onConflict: 'id' })
-    setSettingsState(merged)
-  }, [user, settings])
+  }, [user, isLocal, settings])
 
   return {
     settings,

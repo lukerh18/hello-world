@@ -3,14 +3,22 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import type { WorkoutLog } from '../types'
 
+const LS_KEY = 'workout_logs_v1'
+
+function lsRead(): WorkoutLog[] {
+  try { return JSON.parse(localStorage.getItem(LS_KEY) ?? '[]') as WorkoutLog[] }
+  catch { return [] }
+}
+
 export function useWorkoutLog() {
-  const { user } = useAuth()
-  const [logs, setLogs] = useState<WorkoutLog[]>([])
-  const [loading, setLoading] = useState(true)
+  const { user, isLocal } = useAuth()
+  const [logs, setLogs] = useState<WorkoutLog[]>(isLocal ? lsRead() : [])
+  const [loading, setLoading] = useState(!isLocal)
 
   const today = new Date().toISOString().split('T')[0]
 
   useEffect(() => {
+    if (isLocal) return
     if (!user) { setLogs([]); setLoading(false); return }
 
     supabase
@@ -22,7 +30,7 @@ export function useWorkoutLog() {
         setLogs((data ?? []).map(rowToLog))
         setLoading(false)
       })
-  }, [user])
+  }, [user, isLocal])
 
   const getTodayLog = useCallback((): WorkoutLog | undefined => {
     return logs.find((l) => l.date === today)
@@ -33,22 +41,19 @@ export function useWorkoutLog() {
     [logs]
   )
 
-  const upsertLog = useCallback(async (log: WorkoutLog) => {
-    if (!user) return
-    const row = logToRow(log, user.id)
-    const { data } = await supabase
-      .from('workout_logs')
-      .upsert(row, { onConflict: 'id' })
-      .select()
-      .single()
-    if (data) {
-      setLogs((prev) => {
-        const idx = prev.findIndex((l) => l.id === log.id)
-        if (idx >= 0) { const next = [...prev]; next[idx] = rowToLog(data); return next }
-        return [rowToLog(data), ...prev]
-      })
+  const upsertLog = useCallback((log: WorkoutLog) => {
+    setLogs((prev) => {
+      const idx = prev.findIndex((l) => l.id === log.id)
+      const next = idx >= 0
+        ? prev.map((l, i) => i === idx ? log : l)
+        : [log, ...prev]
+      if (isLocal) localStorage.setItem(LS_KEY, JSON.stringify(next))
+      return next
+    })
+    if (!isLocal && user) {
+      supabase.from('workout_logs').upsert(logToRow(log, user.id), { onConflict: 'id' })
     }
-  }, [user])
+  }, [user, isLocal])
 
   const getLogsForExercise = useCallback(
     (exerciseId: string) =>

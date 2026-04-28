@@ -15,14 +15,27 @@ type CurrentGoals = Record<GoalCategory, string>
 type GoalHistory = Record<GoalCategory, GoalEntry[]>
 
 const CATEGORIES: GoalCategory[] = ['spirit', 'soul', 'body']
+const LS_KEY = 'goals_v1'
+
+const EMPTY: GoalHistory = { spirit: [], soul: [], body: [] }
+
+function lsRead(): GoalHistory {
+  try { return { ...EMPTY, ...(JSON.parse(localStorage.getItem(LS_KEY) ?? '{}') as GoalHistory) } }
+  catch { return EMPTY }
+}
 
 export function useGoals() {
-  const { user } = useAuth()
-  const [current, setCurrent] = useState<CurrentGoals>({ spirit: '', soul: '', body: '' })
-  const [history, setHistory] = useState<GoalHistory>({ spirit: [], soul: [], body: [] })
+  const { user, isLocal } = useAuth()
+  const [history, setHistory] = useState<GoalHistory>(isLocal ? lsRead() : EMPTY)
+
+  const current: CurrentGoals = {
+    spirit: history.spirit[0]?.text ?? '',
+    soul:   history.soul[0]?.text ?? '',
+    body:   history.body[0]?.text ?? '',
+  }
 
   useEffect(() => {
-    if (!user) return
+    if (isLocal || !user) return
     supabase
       .from('goals')
       .select('id, category, text, created_at')
@@ -39,26 +52,21 @@ export function useGoals() {
           }
         }
         setHistory(byCategory)
-        setCurrent({
-          spirit: byCategory.spirit[0]?.text ?? '',
-          soul:   byCategory.soul[0]?.text ?? '',
-          body:   byCategory.body[0]?.text ?? '',
-        })
       })
-  }, [user])
+  }, [user, isLocal])
 
-  const updateGoal = useCallback(async (category: GoalCategory, text: string) => {
-    if (!user || !text.trim()) return
-    const { data, error } = await supabase
-      .from('goals')
-      .insert({ user_id: user.id, category, text: text.trim() })
-      .select()
-      .single()
-    if (error || !data) return
-    const entry: GoalEntry = { id: data.id as string, category, text: text.trim(), createdAt: data.created_at as string }
-    setCurrent((prev) => ({ ...prev, [category]: text.trim() }))
-    setHistory((prev) => ({ ...prev, [category]: [entry, ...prev[category]] }))
-  }, [user])
+  const updateGoal = useCallback((category: GoalCategory, text: string) => {
+    if (!text.trim()) return
+    const entry: GoalEntry = { id: crypto.randomUUID(), category, text: text.trim(), createdAt: new Date().toISOString() }
+    const next = { ...history, [category]: [entry, ...history[category]] }
+    setHistory(next)
+    if (isLocal) {
+      localStorage.setItem(LS_KEY, JSON.stringify(next))
+      return
+    }
+    if (!user) return
+    supabase.from('goals').insert({ user_id: user.id, category, text: text.trim() })
+  }, [user, isLocal, history])
 
   return { current, history, updateGoal }
 }

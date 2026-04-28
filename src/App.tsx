@@ -38,7 +38,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: string |
 }
 
 function AuthGate() {
-  const { user, loading } = useAuth()
+  const { user, loading, isLocal } = useAuth()
   const [showSettings, setShowSettings] = useState(false)
 
   if (loading) {
@@ -49,7 +49,7 @@ function AuthGate() {
     )
   }
 
-  if (!user) return <LoginPage />
+  if (!user && !isLocal) return <LoginPage />
 
   return (
     <div className="min-h-dvh bg-surface-900 pb-20">

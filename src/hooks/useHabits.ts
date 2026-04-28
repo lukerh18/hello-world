@@ -18,18 +18,41 @@ interface HabitLogEntry {
 }
 
 const INITIAL_CONFIG: HabitConfig = { habits: DEFAULT_HABITS, northStar: '', weekFocus: '' }
+const LS_CONFIG = 'habits_config_v1'
+const LS_LOG = 'habit_log_v1'
+
+function lsReadConfig(): HabitConfig {
+  try {
+    const raw = localStorage.getItem(LS_CONFIG)
+    if (!raw) return INITIAL_CONFIG
+    const parsed = JSON.parse(raw) as Partial<HabitConfig>
+    return {
+      habits: (parsed.habits ?? DEFAULT_HABITS).map((h) => ({ ...h, category: normalizeCategory(h.category) })),
+      northStar: parsed.northStar ?? '',
+      weekFocus: parsed.weekFocus ?? '',
+    }
+  } catch { return INITIAL_CONFIG }
+}
+
+function lsReadLog(): HabitLogEntry[] {
+  try {
+    const raw = localStorage.getItem(LS_LOG)
+    return raw ? (JSON.parse(raw) as HabitLogEntry[]) : []
+  } catch { return [] }
+}
 
 export function useHabits() {
-  const { user } = useAuth()
-  const [config, setConfigState] = useState<HabitConfig>(INITIAL_CONFIG)
-  const [log, setLog] = useState<HabitLogEntry[]>([])
-  const [loading, setLoading] = useState(true)
+  const { user, isLocal } = useAuth()
+  const [config, setConfigState] = useState<HabitConfig>(isLocal ? lsReadConfig() : INITIAL_CONFIG)
+  const [log, setLog] = useState<HabitLogEntry[]>(isLocal ? lsReadLog() : [])
+  const [loading, setLoading] = useState(!isLocal)
 
   const today = new Date().toISOString().split('T')[0]
   const dayOfWeek = new Date().getDay()
   const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5
 
   useEffect(() => {
+    if (isLocal) return
     if (!user) { setLoading(false); return }
 
     Promise.all([
@@ -52,9 +75,14 @@ export function useHabits() {
       })))
       setLoading(false)
     })
-  }, [user])
+  }, [user, isLocal])
 
   const saveConfig = useCallback(async (next: HabitConfig) => {
+    setConfigState(next)
+    if (isLocal) {
+      localStorage.setItem(LS_CONFIG, JSON.stringify(next))
+      return
+    }
     if (!user) return
     await supabase.from('habit_config').upsert({
       user_id: user.id,
@@ -63,13 +91,22 @@ export function useHabits() {
       week_focus: next.weekFocus,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id' })
-    setConfigState(next)
-  }, [user])
+  }, [user, isLocal])
 
   const updateTodayLog = useCallback(async (updater: (entry: HabitLogEntry) => HabitLogEntry) => {
-    if (!user) return
     const existing = log.find((e) => e.date === today) ?? { date: today, completedIds: [], choreDone: false, majorTask: '' }
     const updated = updater(existing)
+    const nextLog = (() => {
+      const idx = log.findIndex((e) => e.date === today)
+      if (idx >= 0) { const next = [...log]; next[idx] = updated; return next }
+      return [updated, ...log]
+    })()
+    setLog(nextLog)
+    if (isLocal) {
+      localStorage.setItem(LS_LOG, JSON.stringify(nextLog))
+      return
+    }
+    if (!user) return
     await supabase.from('habit_log').upsert({
       user_id: user.id,
       date: updated.date,
@@ -77,12 +114,7 @@ export function useHabits() {
       chore_done: updated.choreDone,
       major_task: updated.majorTask,
     }, { onConflict: 'user_id,date' })
-    setLog((prev) => {
-      const idx = prev.findIndex((e) => e.date === today)
-      if (idx >= 0) { const next = [...prev]; next[idx] = updated; return next }
-      return [updated, ...prev]
-    })
-  }, [user, log, today])
+  }, [user, isLocal, log, today])
 
   const todayEntry: HabitLogEntry = log.find((e) => e.date === today) ?? { date: today, completedIds: [], choreDone: false, majorTask: '' }
   const todayHabits = config.habits.filter((h) => !h.weekdaysOnly || isWeekday)
@@ -107,13 +139,11 @@ export function useHabits() {
   }, [updateTodayLog])
 
   const addHabit = useCallback((habit: Omit<Habit, 'id'>) => {
-    const next = { ...config, habits: [...config.habits, { ...habit, id: crypto.randomUUID() }] }
-    saveConfig(next)
+    saveConfig({ ...config, habits: [...config.habits, { ...habit, id: crypto.randomUUID() }] })
   }, [config, saveConfig])
 
   const deleteHabit = useCallback((id: string) => {
-    const next = { ...config, habits: config.habits.filter((h) => h.id !== id) }
-    saveConfig(next)
+    saveConfig({ ...config, habits: config.habits.filter((h) => h.id !== id) })
   }, [config, saveConfig])
 
   const setNorthStar = useCallback((text: string) => saveConfig({ ...config, northStar: text }), [config, saveConfig])
@@ -135,7 +165,6 @@ export function useHabits() {
   const doneCount = todayHabits.filter((h) => isHabitDone(h.id)).length + (todayEntry.choreDone ? 1 : 0)
   const totalCount = todayHabits.length + 1
 
-  // Per-category counts
   const categoryDone = (cat: Habit['category']) =>
     todayHabits.filter((h) => h.category === cat && isHabitDone(h.id)).length
   const categoryTotal = (cat: Habit['category']) =>

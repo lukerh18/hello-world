@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, isSupabaseConfigured } from '../lib/supabase'
 
 export interface OuraReadiness {
   score: number
@@ -65,7 +65,7 @@ export function useOuraData(token: string) {
   const isStale = !cache || cache.date !== today || Date.now() - cache.fetchedAt > CACHE_TTL
 
   const refresh = useCallback(async () => {
-    if (!token || !isStale) return
+    if (!token || !isStale || !isSupabaseConfigured) return
     try {
       const { data, error } = await supabase.functions.invoke('oura-data', {
         body: { date: today },

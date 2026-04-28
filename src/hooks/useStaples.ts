@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, isSupabaseConfigured } from '../lib/supabase'
 
 export interface Staple {
   id: string
@@ -11,32 +11,30 @@ export interface Staple {
   fat: number
 }
 
-interface DbRow {
-  id: string
-  name: string
-  serving_size: string | null
-  calories: number | null
-  protein: number | null
-  carbs: number | null
-  fat: number | null
+const LS_KEY = 'staples_v1'
+
+function lsRead(): Staple[] {
+  try { return JSON.parse(localStorage.getItem(LS_KEY) ?? '[]') as Staple[] }
+  catch { return [] }
 }
 
-function toStaple(row: DbRow): Staple {
+function toStaple(row: Record<string, unknown>): Staple {
   return {
-    id: row.id,
-    name: row.name,
-    servingSize: row.serving_size ?? '',
-    calories: row.calories ?? 0,
-    protein: row.protein ?? 0,
-    carbs: row.carbs ?? 0,
-    fat: row.fat ?? 0,
+    id: row.id as string,
+    name: row.name as string,
+    servingSize: (row.serving_size as string) ?? '',
+    calories: (row.calories as number) ?? 0,
+    protein: (row.protein as number) ?? 0,
+    carbs: (row.carbs as number) ?? 0,
+    fat: (row.fat as number) ?? 0,
   }
 }
 
 export function useStaples() {
-  const [staples, setStaples] = useState<Staple[]>([])
+  const [staples, setStaples] = useState<Staple[]>(isSupabaseConfigured ? [] : lsRead())
 
   useEffect(() => {
+    if (!isSupabaseConfigured) return
     supabase
       .from('staples')
       .select('*')
@@ -47,27 +45,28 @@ export function useStaples() {
   }, [])
 
   const addStaple = useCallback(async (s: Omit<Staple, 'id'>) => {
+    const newStaple: Staple = { ...s, id: crypto.randomUUID() }
+    setStaples((prev) => {
+      const next = [...prev, newStaple]
+      if (!isSupabaseConfigured) localStorage.setItem(LS_KEY, JSON.stringify(next))
+      return next
+    })
+    if (!isSupabaseConfigured) return
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
-    const { data, error } = await supabase
-      .from('staples')
-      .insert({
-        user_id: user.id,
-        name: s.name,
-        serving_size: s.servingSize,
-        calories: s.calories,
-        protein: s.protein,
-        carbs: s.carbs,
-        fat: s.fat,
-      })
-      .select()
-      .single()
-    if (!error && data) setStaples((prev) => [...prev, toStaple(data)])
+    supabase.from('staples').insert({
+      user_id: user.id, name: s.name, serving_size: s.servingSize,
+      calories: s.calories, protein: s.protein, carbs: s.carbs, fat: s.fat,
+    })
   }, [])
 
-  const deleteStaple = useCallback(async (id: string) => {
-    await supabase.from('staples').delete().eq('id', id)
-    setStaples((prev) => prev.filter((s) => s.id !== id))
+  const deleteStaple = useCallback((id: string) => {
+    setStaples((prev) => {
+      const next = prev.filter((s) => s.id !== id)
+      if (!isSupabaseConfigured) localStorage.setItem(LS_KEY, JSON.stringify(next))
+      return next
+    })
+    if (isSupabaseConfigured) supabase.from('staples').delete().eq('id', id)
   }, [])
 
   return { staples, addStaple, deleteStaple }

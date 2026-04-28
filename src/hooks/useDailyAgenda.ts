@@ -1,17 +1,26 @@
 import { useState, useEffect, useCallback } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, isSupabaseConfigured } from '../lib/supabase'
 
 interface AgendaRow {
   checked_ids: string[]
   is_cheat_day: boolean
 }
 
+const lsKey = (date: string) => `daily_agenda_${date}`
+
 export function useDailyAgenda() {
   const today = new Date().toISOString().split('T')[0]
-  const [checkedIds, setCheckedIds] = useState<string[]>([])
+  const [checkedIds, setCheckedIds] = useState<string[]>(() => {
+    if (!isSupabaseConfigured) {
+      try { return JSON.parse(localStorage.getItem(lsKey(today)) ?? '[]') as string[] }
+      catch { return [] }
+    }
+    return []
+  })
   const [isCheatDay, setIsCheatDay] = useState(false)
 
   useEffect(() => {
+    if (!isSupabaseConfigured) return
     supabase
       .from('daily_agenda')
       .select('checked_ids, is_cheat_day')
@@ -26,6 +35,7 @@ export function useDailyAgenda() {
   }, [today])
 
   const upsert = useCallback(async (ids: string[], cheat: boolean) => {
+    if (!isSupabaseConfigured) return
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
     await supabase.from('daily_agenda').upsert(
@@ -37,18 +47,20 @@ export function useDailyAgenda() {
   const toggleItem = useCallback((id: string) => {
     setCheckedIds((prev) => {
       const next = prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
-      upsert(next, isCheatDay)
+      if (isSupabaseConfigured) upsert(next, isCheatDay)
+      else localStorage.setItem(lsKey(today), JSON.stringify(next))
       return next
     })
-  }, [isCheatDay, upsert])
+  }, [isCheatDay, upsert, today])
 
   const checkAll = useCallback((ids: string[]) => {
     setCheckedIds((prev) => {
       const next = [...new Set([...prev, ...ids])]
-      upsert(next, isCheatDay)
+      if (isSupabaseConfigured) upsert(next, isCheatDay)
+      else localStorage.setItem(lsKey(today), JSON.stringify(next))
       return next
     })
-  }, [isCheatDay, upsert])
+  }, [isCheatDay, upsert, today])
 
   const toggleCheatDay = useCallback(() => {
     setIsCheatDay((prev) => {

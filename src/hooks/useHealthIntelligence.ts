@@ -43,7 +43,7 @@ export function useHealthIntelligence(healthContext?: string) {
   }, [session])
 
   const ask = useCallback(async (question: string): Promise<QAEntry | null> => {
-    if (!session) { setError('Not signed in'); return null }
+    if (!session) { setError('Sign in to use AI health answers'); return null }
     setLoading(true)
     setError(null)
     try {

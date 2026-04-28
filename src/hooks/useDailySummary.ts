@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, isSupabaseConfigured } from '../lib/supabase'
 
 interface SummaryContext {
   dayName: string
@@ -15,6 +15,7 @@ export function useDailySummary(context: SummaryContext) {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
+    if (!isSupabaseConfigured) { setLoading(false); return }
     let cancelled = false
     setLoading(true)
 
