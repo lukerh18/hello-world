@@ -4,7 +4,14 @@ import react from '@vitejs/plugin-react-swc'
 export default defineConfig({
   base: '/',
   optimizeDeps: {
-    include: ['@supabase/supabase-js'],
+    include: [
+      '@supabase/supabase-js',
+      '@supabase/auth-js',
+      '@supabase/realtime-js',
+      '@supabase/postgrest-js',
+      '@supabase/storage-js',
+      '@supabase/functions-js',
+    ],
   },
   plugins: [
     {
