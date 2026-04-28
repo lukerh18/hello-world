@@ -5,19 +5,19 @@ module.exports = {
     extend: {
       colors: {
         surface: {
-          900: '#0B0907',  // warm desert night
-          800: '#141009',  // cards
-          700: '#1E1911',  // inputs, inner surfaces
-          600: '#2B2215',  // borders, dividers
+          900: '#07100A',  // deep forest night
+          800: '#0D1A11',  // card surface — dark moss
+          700: '#142119',  // inputs — forest shadow
+          600: '#1C2E22',  // borders — forest edge
         },
         accent: {
-          DEFAULT: '#C8902A',  // Joshua Tree amber
-          light:   '#D4A44A',  // warm gold
-          muted:   '#6B8A6E',  // desert sage
+          DEFAULT: '#4CAF7D',  // Rivian forest green
+          light:   '#6DC99A',  // lighter canopy
+          muted:   '#2E7A52',  // deep understory
         },
-        success: '#7A9E7E',  // sage green
-        warn:    '#D4952A',  // warm amber-yellow
-        danger:  '#C04A3A',  // terracotta red
+        success: '#5DBF82',  // bright leaf
+        warn:    '#C8852A',  // amber harvest
+        danger:  '#B84A3A',  // terracotta clay
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
@@ -36,7 +36,7 @@ module.exports = {
         },
         'block-glow': {
           '0%, 100%': { boxShadow: '0 0 0 0 transparent' },
-          '40%':      { boxShadow: '0 0 24px 4px rgba(122, 158, 126, 0.22)' },
+          '40%':      { boxShadow: '0 0 24px 4px rgba(77, 175, 125, 0.2)' },
         },
         'fade-up': {
           'from': { opacity: '0', transform: 'translateY(6px)' },

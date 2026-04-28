@@ -1,51 +1,54 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import {
-  HomeIcon,
-  BoltIcon,
-  ChartBarIcon,
-  TrophyIcon,
+  Squares2X2Icon,
   SparklesIcon,
   HeartIcon,
+  BoltIcon,
 } from '@heroicons/react/24/outline'
 import {
-  HomeIcon as HomeIconSolid,
-  BoltIcon as BoltIconSolid,
-  ChartBarIcon as ChartBarIconSolid,
-  TrophyIcon as TrophyIconSolid,
-  SparklesIcon as SparklesIconSolid,
-  HeartIcon as HeartIconSolid,
+  Squares2X2Icon as Squares2X2Solid,
+  SparklesIcon as SparklesSolid,
+  HeartIcon as HeartSolid,
+  BoltIcon as BoltSolid,
 } from '@heroicons/react/24/solid'
 
 const tabs = [
-  { to: '/',          label: 'Today',    Icon: HomeIcon,      IconActive: HomeIconSolid      },
-  { to: '/workout',   label: 'Workout',  Icon: BoltIcon,      IconActive: BoltIconSolid      },
-  { to: '/nutrition', label: 'Nutrition',Icon: ChartBarIcon,  IconActive: ChartBarIconSolid  },
-  { to: '/progress',  label: 'Progress', Icon: TrophyIcon,    IconActive: TrophyIconSolid    },
-  { to: '/life',      label: 'Life',     Icon: SparklesIcon,  IconActive: SparklesIconSolid  },
-  { to: '/health',    label: 'Health',   Icon: HeartIcon,     IconActive: HeartIconSolid     },
+  { to: '/',               label: 'Overview', Icon: Squares2X2Icon, IconActive: Squares2X2Solid, exact: true  },
+  { to: '/life?tab=spirit',label: 'Spirit',   Icon: SparklesIcon,   IconActive: SparklesSolid,  exact: false },
+  { to: '/life?tab=soul',  label: 'Soul',     Icon: HeartIcon,      IconActive: HeartSolid,     exact: false },
+  { to: '/body',           label: 'Body',     Icon: BoltIcon,       IconActive: BoltSolid,      exact: false },
 ]
 
 export function BottomNav() {
+  const location = useLocation()
+
+  function isActive(tab: typeof tabs[number]) {
+    if (tab.exact) return location.pathname === '/'
+    if (tab.to === '/life?tab=spirit') return location.pathname === '/life' && location.search.includes('spirit')
+    if (tab.to === '/life?tab=soul')   return location.pathname === '/life' && location.search.includes('soul')
+    return location.pathname.startsWith(tab.to.split('?')[0])
+  }
+
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-surface-800 border-t border-surface-600 safe-bottom z-40">
-      <div className="flex items-center justify-around h-14">
-        {tabs.map(({ to, label, Icon, IconActive }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={to === '/'}
-            aria-label={label}
-            className={({ isActive }) =>
-              `flex items-center justify-center w-full h-full transition-colors ${
-                isActive ? 'text-accent' : 'text-slate-600 hover:text-slate-400'
-              }`
-            }
-          >
-            {({ isActive }) =>
-              isActive ? <IconActive className="w-6 h-6" /> : <Icon className="w-6 h-6" />
-            }
-          </NavLink>
-        ))}
+    <nav className="fixed bottom-0 left-0 right-0 bg-surface-800/95 backdrop-blur border-t border-surface-600 safe-bottom z-40">
+      <div className="flex items-center justify-around h-16 px-2">
+        {tabs.map((tab) => {
+          const active = isActive(tab)
+          const Icon = active ? tab.IconActive : tab.Icon
+          return (
+            <NavLink
+              key={tab.label}
+              to={tab.to}
+              aria-label={tab.label}
+              className="flex flex-col items-center justify-center gap-0.5 flex-1 h-full transition-colors"
+            >
+              <Icon className={`w-5 h-5 transition-colors ${active ? 'text-accent' : 'text-slate-600'}`} />
+              <span className={`text-[10px] font-medium transition-colors ${active ? 'text-accent' : 'text-slate-600'}`}>
+                {tab.label}
+              </span>
+            </NavLink>
+          )
+        })}
       </div>
     </nav>
   )

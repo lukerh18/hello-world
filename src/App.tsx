@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { HashRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider, useAuth } from './lib/auth'
 import { BottomNav } from './components/layout/BottomNav'
+import { TopNav } from './components/layout/TopNav'
 import { SettingsModal } from './components/shared/SettingsModal'
 import { useState } from 'react'
 import LoginPage from './pages/LoginPage'
@@ -13,6 +14,7 @@ import ProgressPage from './pages/ProgressPage'
 import ProgramPage from './pages/ProgramPage'
 import HabitsPage from './pages/HabitsPage'
 import HealthPage from './pages/HealthPage'
+import BodyPage from './pages/BodyPage'
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: string | null }> {
   constructor(props: { children: ReactNode }) {
@@ -51,6 +53,7 @@ function AuthGate() {
 
   return (
     <div className="min-h-dvh bg-surface-900 pb-20">
+      <TopNav />
       <Routes>
         <Route path="/" element={<TodayPage onOpenSettings={() => setShowSettings(true)} />} />
         <Route path="/workout" element={<WorkoutPage />} />
@@ -59,6 +62,7 @@ function AuthGate() {
         <Route path="/program" element={<ProgramPage />} />
         <Route path="/life" element={<HabitsPage />} />
         <Route path="/health" element={<HealthPage />} />
+        <Route path="/body" element={<BodyPage />} />
       </Routes>
       <BottomNav />
       <SettingsModal open={showSettings} onClose={() => setShowSettings(false)} />
