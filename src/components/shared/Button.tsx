@@ -8,16 +8,16 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantClasses = {
-  primary: 'bg-accent text-white hover:bg-accent-light active:scale-95',
-  secondary: 'bg-surface-700 text-slate-200 hover:bg-surface-600 active:scale-95',
-  ghost: 'bg-transparent text-slate-400 hover:text-slate-200 hover:bg-surface-700 active:scale-95',
-  danger: 'bg-danger/20 text-danger hover:bg-danger/30 active:scale-95',
+  primary:     'bg-accent text-surface-950 hover:bg-accent-light shadow-card-inset active:scale-[0.98]',
+  secondary:   'bg-surface-800 border border-border-subtle text-text-primary hover:bg-surface-700 shadow-card-inset active:scale-[0.98]',
+  ghost:       'bg-transparent text-text-secondary hover:text-text-primary hover:bg-surface-700 active:scale-[0.98]',
+  danger:      'bg-transparent text-danger border border-danger hover:bg-danger/10 active:scale-95',
 }
 
 const sizeClasses = {
-  sm: 'px-3 py-1.5 text-sm rounded-lg',
+  sm: 'px-3 py-1.5 text-sm rounded-xl',
   md: 'px-4 py-2.5 text-sm rounded-xl',
-  lg: 'px-6 py-3.5 text-base rounded-xl',
+  lg: 'px-6 py-3.5 text-base rounded-panel',
 }
 
 export function Button({
@@ -31,7 +31,7 @@ export function Button({
   return (
     <button
       className={[
-        'font-semibold transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed',
+        'focus-rivian font-semibold transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed',
         variantClasses[variant],
         sizeClasses[size],
         fullWidth ? 'w-full' : '',

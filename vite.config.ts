@@ -3,6 +3,11 @@ import react from '@vitejs/plugin-react-swc'
 
 export default defineConfig({
   base: '/',
+  server: {
+    watch: {
+      ignored: ['**/.env.local', '**/vite.config.ts', '**/tailwind.config.cjs'],
+    },
+  },
   optimizeDeps: {
     include: [
       '@supabase/supabase-js',

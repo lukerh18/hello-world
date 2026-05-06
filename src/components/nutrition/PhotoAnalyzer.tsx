@@ -1,5 +1,7 @@
 import { useRef, useState } from 'react'
 import { CameraIcon, XMarkIcon } from '@heroicons/react/24/outline'
+import { Camera, CameraResultType, CameraSource } from '@capacitor/camera'
+import { Capacitor } from '@capacitor/core'
 import { supabase } from '../../lib/supabase'
 import type { FoodItem } from '../../types'
 
@@ -9,16 +11,33 @@ interface ParsedFood {
   protein: number
   carbs: number
   fat: number
+  sugar?: number
   serving: string
 }
 
-type MealId = 'breakfast' | 'lunch' | 'snack' | 'dinner'
+type MealId = 'breakfast' | 'lunch' | 'snacks' | 'dinner'
 
 interface PhotoAnalyzerProps {
   onFoodParsed: (food: Omit<FoodItem, 'id'>, mealId: MealId) => void
 }
 
-function resizeImage(file: File, maxPx = 800): Promise<string> {
+function resizeDataUrl(dataUrl: string, maxPx = 800): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      const scale = Math.min(1, maxPx / Math.max(img.width, img.height))
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.round(img.width * scale)
+      canvas.height = Math.round(img.height * scale)
+      canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height)
+      resolve(canvas.toDataURL('image/jpeg', 0.85).split(',')[1])
+    }
+    img.onerror = reject
+    img.src = dataUrl
+  })
+}
+
+function resizeFile(file: File, maxPx = 800): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image()
     img.onload = () => {
@@ -35,7 +54,7 @@ function resizeImage(file: File, maxPx = 800): Promise<string> {
 }
 
 export function PhotoAnalyzer({ onFoodParsed }: PhotoAnalyzerProps) {
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLInputElement | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
@@ -45,17 +64,16 @@ export function PhotoAnalyzer({ onFoodParsed }: PhotoAnalyzerProps) {
   const meals: { value: MealId; label: string }[] = [
     { value: 'breakfast', label: 'Breakfast' },
     { value: 'lunch', label: 'Lunch' },
-    { value: 'snack', label: 'Snack' },
+    { value: 'snacks', label: 'Snack' },
     { value: 'dinner', label: 'Dinner' },
   ]
 
-  const handleFile = async (file: File) => {
+  const analyzeBase64 = async (base64: string, previewSrc: string) => {
     setError(null)
     setParsed(null)
-    setPreview(URL.createObjectURL(file))
+    setPreview(previewSrc)
     setLoading(true)
     try {
-      const base64 = await resizeImage(file)
       const { data, error: fnErr } = await supabase.functions.invoke('analyze-food-photo', {
         body: { base64 },
       })
@@ -69,10 +87,41 @@ export function PhotoAnalyzer({ onFoodParsed }: PhotoAnalyzerProps) {
     }
   }
 
+  const handleNativeCamera = async () => {
+    try {
+      const photo = await Camera.getPhoto({
+        resultType: CameraResultType.DataUrl,
+        source: CameraSource.Camera,
+        quality: 85,
+      })
+      if (!photo.dataUrl) return
+      const base64 = await resizeDataUrl(photo.dataUrl)
+      await analyzeBase64(base64, photo.dataUrl)
+    } catch (e) {
+      // user cancelled — no-op
+      if (e instanceof Error && e.message.toLowerCase().includes('cancel')) return
+      setError(e instanceof Error ? e.message : 'Camera error')
+    }
+  }
+
+  const handleWebFile = async (file: File) => {
+    const previewSrc = URL.createObjectURL(file)
+    const base64 = await resizeFile(file)
+    await analyzeBase64(base64, previewSrc)
+  }
+
+  const handleScan = () => {
+    if (Capacitor.isNativePlatform()) {
+      handleNativeCamera()
+    } else {
+      inputRef.current?.click()
+    }
+  }
+
   const handleConfirm = () => {
     if (!parsed) return
     onFoodParsed(
-      { name: parsed.name, calories: parsed.calories, protein: parsed.protein, carbs: parsed.carbs, fat: parsed.fat },
+      { name: parsed.name, calories: parsed.calories, protein: parsed.protein, carbs: parsed.carbs, fat: parsed.fat, ...(parsed.sugar != null ? { sugar: parsed.sugar } : {}) },
       selectedMeal
     )
     setPreview(null)
@@ -87,6 +136,7 @@ export function PhotoAnalyzer({ onFoodParsed }: PhotoAnalyzerProps) {
 
   return (
     <div>
+      {/* Web fallback — hidden on native */}
       <input
         ref={inputRef}
         type="file"
@@ -95,13 +145,13 @@ export function PhotoAnalyzer({ onFoodParsed }: PhotoAnalyzerProps) {
         className="hidden"
         onChange={(e) => {
           const file = e.target.files?.[0]
-          if (file) handleFile(file)
+          if (file) handleWebFile(file)
           e.target.value = ''
         }}
       />
 
       <button
-        onClick={() => inputRef.current?.click()}
+        onClick={handleScan}
         className="flex items-center gap-2 px-3 py-2 rounded-xl bg-surface-800 border border-surface-700 text-sm text-slate-300 hover:border-accent/50 transition-colors"
         title="Analyze food photo with AI"
       >
@@ -141,6 +191,7 @@ export function PhotoAnalyzer({ onFoodParsed }: PhotoAnalyzerProps) {
                     <span className="text-blue-400"><span className="font-semibold">{parsed.protein}g</span> P</span>
                     <span className="text-accent"><span className="font-semibold">{parsed.carbs}g</span> C</span>
                     <span className="text-warn"><span className="font-semibold">{parsed.fat}g</span> F</span>
+                    {parsed.sugar != null && <span className="text-orange-400"><span className="font-semibold">{parsed.sugar}g</span> Sug</span>}
                   </div>
                 </div>
 

@@ -7,6 +7,7 @@ export const NUTRITION_TARGETS: NutritionTargets = {
   protein: 200,
   carbs: 190,
   fat: 60,
+  sugar: 40,
 }
 
 export const DEFAULT_USER_PROFILE: UserProfile = {

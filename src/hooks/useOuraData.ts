@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 export interface OuraReadiness {
@@ -29,12 +29,6 @@ export interface OuraData {
   activity?: OuraActivity
 }
 
-interface OuraCache {
-  date: string
-  data: OuraData
-  fetchedAt: number
-}
-
 interface RawReadiness {
   score: number
   resting_heart_rate: number
@@ -57,24 +51,64 @@ interface RawActivity {
 }
 
 const CACHE_TTL = 30 * 60 * 1000
+const storageKey = (date: string) => `oura_${date}`
+
+function readStorage(date: string): { data: OuraData; fetchedAt: number } | null {
+  try {
+    const raw = localStorage.getItem(storageKey(date))
+    return raw ? (JSON.parse(raw) as { data: OuraData; fetchedAt: number }) : null
+  } catch {
+    return null
+  }
+}
+
+function writeStorage(date: string, data: OuraData) {
+  try {
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith('oura_') && k !== storageKey(date))
+      .forEach((k) => localStorage.removeItem(k))
+    localStorage.setItem(storageKey(date), JSON.stringify({ data, fetchedAt: Date.now() }))
+  } catch {}
+}
 
 export function useOuraData(token: string) {
-  const [cache, setCache] = useState<OuraCache | null>(null)
-
   const today = new Date().toISOString().split('T')[0]
-  const isStale = !cache || cache.date !== today || Date.now() - cache.fetchedAt > CACHE_TTL
+  const fetchingRef = useRef(false)
+
+  const stored = readStorage(today)
+  const hasFreshCache = Boolean(stored && Date.now() - stored.fetchedAt < CACHE_TTL)
+
+  const [data, setData] = useState<OuraData>(() => stored?.data ?? { date: today })
+  // Start in loading state if we have a token but no fresh cache
+  const [isFetching, setIsFetching] = useState(() => Boolean(token) && !hasFreshCache)
+  const [error, setError] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
-    if (!token || !isStale) return
+    if (!token || fetchingRef.current) return
+
+    const cached = readStorage(today)
+    if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) {
+      setData(cached.data)
+      setIsFetching(false)
+      return
+    }
+
+    fetchingRef.current = true
+    setIsFetching(true)
+    setError(null)
+
     try {
-      const { data, error } = await supabase.functions.invoke('oura-data', {
+      const { data: resp, error: fnError } = await supabase.functions.invoke('oura-data', {
         body: { date: today },
       })
-      if (error || !data) return
+      if (fnError || !resp) {
+        setError('Failed to load Oura data')
+        return
+      }
 
-      const r = data.readiness as RawReadiness | null
-      const s = data.sleep as RawSleep | null
-      const a = data.activity as RawActivity | null
+      const r = resp.readiness as RawReadiness | null
+      const s = resp.sleep as RawSleep | null
+      const a = resp.activity as RawActivity | null
 
       const ouraData: OuraData = {
         date: today,
@@ -95,20 +129,22 @@ export function useOuraData(token: string) {
               average_hrv: s.average_hrv ?? 0,
             }
           : undefined,
-        activity: a ? { score: a.score, active_calories: a.active_calories, steps: a.steps } : undefined,
+        activity: a
+          ? { score: a.score, active_calories: a.active_calories, steps: a.steps }
+          : undefined,
       }
-      setCache({ date: today, data: ouraData, fetchedAt: Date.now() })
+
+      setData(ouraData)
+      writeStorage(today, ouraData)
     } catch {
-      // silent — show stale data if available
+      setError('Network error — check your connection')
+    } finally {
+      fetchingRef.current = false
+      setIsFetching(false)
     }
-  }, [token, today, isStale])
+  }, [token, today])
 
-  const data: OuraData = cache?.date === today ? cache.data : { date: today }
+  const hasData = Boolean(data.readiness ?? data.sleep ?? data.activity)
 
-  return {
-    data,
-    refresh,
-    hasData: Boolean(data.readiness ?? data.sleep ?? data.activity),
-    isLoading: isStale && Boolean(token),
-  }
+  return { data, refresh, hasData, isLoading: isFetching, error }
 }

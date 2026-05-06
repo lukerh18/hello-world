@@ -40,7 +40,7 @@ serve(async (req) => {
               { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64 } },
               {
                 type: 'text',
-                text: 'Identify this food. Respond ONLY with valid JSON, no markdown: {"name":"...","calories":0,"protein":0,"carbs":0,"fat":0,"serving":"..."}',
+                text: 'Identify this food. Respond ONLY with valid JSON, no markdown: {"name":"...","calories":0,"protein":0,"carbs":0,"fat":0,"sugar":0,"serving":"..."}',
               },
             ],
           },

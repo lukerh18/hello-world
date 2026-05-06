@@ -3,6 +3,11 @@
   "appName": "Luke's Life Tracker",
   "webDir": "dist",
   "ios": {
-    "contentInset": "automatic"
+    "contentInset": "never"
+  },
+  "plugins": {
+    "StatusBar": {
+      "overlaysWebView": true
+    }
   }
 }

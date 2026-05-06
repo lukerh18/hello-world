@@ -81,12 +81,12 @@ function GenerateProfileModal({ onClose, onGenerated }: { onClose: () => void; o
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-slate-400 text-xs mb-1 block">Age</label>
-              <input type="number" value={age} onChange={(e) => setAge(e.target.value)} placeholder="34"
+              <input type="number" inputMode="numeric" pattern="[0-9]*" value={age} onChange={(e) => setAge(e.target.value)} placeholder="34"
                 className="w-full bg-surface-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-accent" />
             </div>
             <div>
               <label className="text-slate-400 text-xs mb-1 block">Sleep (hrs/night)</label>
-              <input type="number" value={sleepHours} onChange={(e) => setSleepHours(e.target.value)} placeholder="7.5"
+              <input type="number" inputMode="decimal" value={sleepHours} onChange={(e) => setSleepHours(e.target.value)} placeholder="7.5"
                 className="w-full bg-surface-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-accent" />
             </div>
           </div>
@@ -94,9 +94,9 @@ function GenerateProfileModal({ onClose, onGenerated }: { onClose: () => void; o
           <div>
             <label className="text-slate-400 text-xs mb-1 block">Height</label>
             <div className="flex gap-2">
-              <input type="number" value={heightFt} onChange={(e) => setHeightFt(e.target.value)} placeholder="5 ft"
+              <input type="number" inputMode="numeric" pattern="[0-9]*" value={heightFt} onChange={(e) => setHeightFt(e.target.value)} placeholder="5 ft"
                 className="w-1/2 bg-surface-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-accent" />
-              <input type="number" value={heightIn} onChange={(e) => setHeightIn(e.target.value)} placeholder="11 in"
+              <input type="number" inputMode="numeric" pattern="[0-9]*" value={heightIn} onChange={(e) => setHeightIn(e.target.value)} placeholder="11 in"
                 className="w-1/2 bg-surface-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-accent" />
             </div>
           </div>
@@ -104,12 +104,12 @@ function GenerateProfileModal({ onClose, onGenerated }: { onClose: () => void; o
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-slate-400 text-xs mb-1 block">Current weight (lbs)</label>
-              <input type="number" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="193"
+              <input type="number" inputMode="decimal" value={weight} onChange={(e) => setWeight(e.target.value)} placeholder="193"
                 className="w-full bg-surface-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-accent" />
             </div>
             <div>
               <label className="text-slate-400 text-xs mb-1 block">Goal weight (lbs)</label>
-              <input type="number" value={goalWeight} onChange={(e) => setGoalWeight(e.target.value)} placeholder="185"
+              <input type="number" inputMode="decimal" value={goalWeight} onChange={(e) => setGoalWeight(e.target.value)} placeholder="185"
                 className="w-full bg-surface-700 border border-white/10 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-accent" />
             </div>
           </div>

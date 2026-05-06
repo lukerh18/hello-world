@@ -1,4 +1,4 @@
-import type { WorkoutDay, PhaseConfig, ExerciseDefinition } from '../types'
+import type { DayOfWeek, WorkoutDay, PhaseConfig, ExerciseDefinition } from '../types'
 
 // ─── Exercise Definitions ─────────────────────────────────────────────────────
 

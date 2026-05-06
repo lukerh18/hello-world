@@ -9,7 +9,7 @@ declare global {
             client_id: string
             scope: string
             callback: (response: { access_token?: string; error?: string }) => void
-          }) => { requestAccessToken: () => void }
+          }) => { requestAccessToken: (options?: { prompt?: '' | 'none' | 'consent' | 'select_account' }) => void }
         }
       }
     }
@@ -80,34 +80,53 @@ export function useGoogleCalendar(clientId: string) {
   const accessToken = tokenCache?.token ?? null
   const isConnected = Boolean(accessToken)
 
-  const connect = useCallback(async () => {
-    if (!clientId) { setError('No Google Client ID configured in Settings'); return }
-    setError(null)
+  const requestGoogleToken = useCallback(async (interactive: boolean): Promise<boolean> => {
+    if (!clientId) {
+      if (interactive) setError('No Google Client ID configured in Settings')
+      return false
+    }
+    if (interactive) setError(null)
+
     try {
       await loadGisScript()
       await new Promise<void>((resolve) => setTimeout(resolve, 200))
 
-      const tokenClient = window.google!.accounts.oauth2.initTokenClient({
-        client_id: clientId,
-        scope: CALENDAR_SCOPE,
-        callback: (response) => {
-          if (response.error) {
-            setError(`Google auth failed: ${response.error}`)
-          } else if (response.access_token) {
+      const success = await new Promise<boolean>((resolve) => {
+        const tokenClient = window.google!.accounts.oauth2.initTokenClient({
+          client_id: clientId,
+          scope: CALENDAR_SCOPE,
+          callback: (response) => {
+            if (response.error) {
+              if (interactive) setError(`Google auth failed: ${response.error}`)
+              resolve(false)
+              return
+            }
+            if (!response.access_token) {
+              resolve(false)
+              return
+            }
+
             const cache: TokenCache = {
               token: response.access_token,
               expiresAt: Date.now() + (3600 - 60) * 1000,
             }
             localStorage.setItem(TOKEN_KEY, JSON.stringify(cache))
             setTokenCache(cache)
-          }
-        },
+            resolve(true)
+          },
+        })
+        tokenClient.requestAccessToken({ prompt: interactive ? 'select_account' : 'none' })
       })
-      tokenClient.requestAccessToken()
+      return success
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Google sign-in failed')
+      if (interactive) setError(e instanceof Error ? e.message : 'Google sign-in failed')
+      return false
     }
   }, [clientId])
+
+  const connect = useCallback(async () => {
+    await requestGoogleToken(true)
+  }, [requestGoogleToken])
 
   const fetchTodayEvents = useCallback(async (token: string) => {
     setLoading(true)
@@ -168,8 +187,14 @@ export function useGoogleCalendar(clientId: string) {
   // Auto-fetch on mount from persisted token
   useEffect(() => {
     const cached = readCachedToken()
-    if (cached) fetchTodayEvents(cached.token)
-  }, [fetchTodayEvents])
+    if (cached) {
+      fetchTodayEvents(cached.token)
+      return
+    }
+    if (clientId) {
+      requestGoogleToken(false)
+    }
+  }, [clientId, fetchTodayEvents, requestGoogleToken])
 
   useEffect(() => {
     if (accessToken) fetchTodayEvents(accessToken)

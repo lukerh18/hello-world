@@ -1,21 +1,23 @@
-import { useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { PageHeader } from '../components/layout/PageHeader'
-import { MacroRing } from '../components/nutrition/MacroRing'
 import { MealCard } from '../components/nutrition/MealCard'
 import { AddFoodModal } from '../components/nutrition/AddFoodModal'
 import { NutritionSummary } from '../components/nutrition/NutritionSummary'
 import { MealSuggestions } from '../components/nutrition/MealSuggestions'
-import { ShoppingList } from '../components/nutrition/ShoppingList'
 import { PhotoAnalyzer } from '../components/nutrition/PhotoAnalyzer'
 import { Button } from '../components/shared/Button'
+import { CelebrationBanner, type CelebrationMessage } from '../components/shared/CelebrationBanner'
 import { useNutritionLog } from '../hooks/useNutritionLog'
-import { useSettings } from '../hooks/useSettings'
+import { useMealReminders } from '../hooks/useMealReminders'
 import { NUTRITION_TARGETS } from '../data/userProfile'
 import { getMealsForDay } from '../data/mealPlan'
-import { ChevronLeftIcon, ChevronRightIcon, ShoppingCartIcon } from '@heroicons/react/24/outline'
-import type { FoodItem } from '../types'
+import type { SuggestedMeal } from '../data/mealPlan'
+import { BellIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline'
+import type { DailyNutrition, FoodItem } from '../types'
+import { celebrateBlock, celebrateSingle } from '../utils/celebrate'
 
-type MealId = 'breakfast' | 'lunch' | 'snack' | 'dinner'
+type MealId = 'breakfast' | 'lunch' | 'snacks' | 'dinner'
+type SuggestedMealId = SuggestedMeal['id']
 
 function formatDateDisplay(dateStr: string): string {
   const d = new Date(dateStr + 'T12:00:00')
@@ -38,21 +40,67 @@ function getDayOfWeek(dateStr: string): import('../types').DayOfWeek {
 
 type Tab = 'logged' | 'suggested'
 
+function createFoodId(): string {
+  return crypto.randomUUID()
+}
+
+function normalizeSuggestedMealId(mealId: string): MealId {
+  return mealId === 'snack' ? 'snacks' : mealId as MealId
+}
+
+function getCurrentSuggestedMealId(now = new Date()): SuggestedMealId {
+  const minutes = now.getHours() * 60 + now.getMinutes()
+  if (minutes < 10 * 60 + 30) return 'breakfast'
+  if (minutes < 14 * 60 + 30) return 'lunch'
+  if (minutes < 17 * 60 + 30) return 'snack'
+  return 'dinner'
+}
+
+function hasMealFood(dayData: DailyNutrition, mealId: SuggestedMealId): boolean {
+  const logMealId = normalizeSuggestedMealId(mealId)
+  return dayData.meals.some((meal) => meal.id === logMealId && meal.foods.length > 0)
+}
+
+function getSmartSuggestedMealId(dayData: DailyNutrition, date: string, today: string): SuggestedMealId {
+  const order: SuggestedMealId[] = ['breakfast', 'lunch', 'snack', 'dinner']
+  const currentMealId = date === today ? getCurrentSuggestedMealId() : 'breakfast'
+  const currentIndex = order.indexOf(currentMealId)
+  const remainingToday = order.slice(currentIndex).find((mealId) => !hasMealFood(dayData, mealId))
+  const firstOpenMeal = order.find((mealId) => !hasMealFood(dayData, mealId))
+  return remainingToday ?? firstOpenMeal ?? currentMealId
+}
+
+function prioritizeSuggestedMeals(meals: SuggestedMeal[], recommendedMealId: SuggestedMealId): SuggestedMeal[] {
+  const recommended = meals.find((meal) => meal.id === recommendedMealId)
+  if (!recommended) return meals
+  return [recommended, ...meals.filter((meal) => meal.id !== recommendedMealId)]
+}
+
 export default function NutritionPage() {
   const today = new Date().toISOString().split('T')[0]
   const [date, setDate] = useState(today)
   const [addFoodOpen, setAddFoodOpen] = useState(false)
   const [activeMealId, setActiveMealId] = useState<string>('breakfast')
   const [tab, setTab] = useState<Tab>('logged')
-  const [shoppingOpen, setShoppingOpen] = useState(false)
   const [loggedMealIds, setLoggedMealIds] = useState<Set<string>>(new Set())
+  const [celebration, setCelebration] = useState<CelebrationMessage | null>(null)
 
-  const { getByDate, addFood, deleteFood, updateWater, getDayTotals } = useNutritionLog()
-  const { settings } = useSettings()
+  const { getByDate, addFood, addFoods, deleteFood, getDayTotals } = useNutritionLog()
+  const { reminders, permission, toggle, setTime, requestPermission } = useMealReminders()
+  const [showReminders, setShowReminders] = useState(false)
 
   const dayData = getByDate(date)
   const totals = getDayTotals(date)
   const suggestedMeals = getMealsForDay(getDayOfWeek(date))
+  const recommendedMealId = useMemo(() => getSmartSuggestedMealId(dayData, date, today), [dayData, date, today])
+  const prioritizedSuggestedMeals = useMemo(
+    () => prioritizeSuggestedMeals(suggestedMeals, recommendedMealId),
+    [suggestedMeals, recommendedMealId]
+  )
+
+  const nextMeal = useMemo(() => {
+    return dayData.meals.find((meal) => meal.id === normalizeSuggestedMealId(recommendedMealId)) ?? dayData.meals[0]
+  }, [dayData.meals, recommendedMealId])
 
   const changeDate = (delta: number) => {
     const d = new Date(date + 'T12:00:00')
@@ -61,8 +109,25 @@ export default function NutritionPage() {
     if (next <= today) setDate(next)
   }
 
+  const showCelebration = useCallback((message: Omit<CelebrationMessage, 'id'>) => {
+    setCelebration({ ...message, id: Date.now() })
+  }, [])
+
+  const clearCelebration = useCallback(() => setCelebration(null), [])
+
+  const celebrateFoodLog = useCallback((mealName: string, detail?: string) => {
+    celebrateSingle()
+    showCelebration({
+      tone: 'warm',
+      title: `${mealName} logged. Nice care for your Body.`,
+      detail: detail ?? 'Quick logging done. That is the rhythm working for you.',
+    })
+  }, [showCelebration])
+
   const handleAddFood = (mealId: string, food: FoodItem) => {
     addFood(date, mealId, food)
+    const mealName = dayData.meals.find((meal) => meal.id === mealId)?.name ?? 'Food'
+    celebrateFoodLog(mealName, `${food.name} is in your log. Good job following through.`)
   }
 
   const openAddFood = (mealId: string) => {
@@ -70,42 +135,41 @@ export default function NutritionPage() {
     setAddFoodOpen(true)
   }
 
-  const handleLogSuggestedMeal = (meal: import('../data/mealPlan').SuggestedMeal) => {
-    meal.items.forEach((item) => {
-      const food: FoodItem = {
-        id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
-        name: item.name,
-        calories: item.calories,
-        protein: item.protein,
-        carbs: item.carbs,
-        fat: item.fat,
-      }
-      addFood(date, meal.id, food)
-    })
+  const handleLogSuggestedMeal = (meal: SuggestedMeal) => {
+    const foods: FoodItem[] = meal.items.map((item) => ({
+      id: createFoodId(),
+      name: item.name,
+      calories: item.calories,
+      protein: item.protein,
+      carbs: item.carbs,
+      fat: item.fat,
+    }))
+    addFoods(date, meal.id, foods)
     setLoggedMealIds((prev) => new Set([...prev, meal.id + '_suggested']))
+    celebrateBlock()
+    showCelebration({
+      tone: 'success',
+      title: `${meal.name} logged. You made the healthy choice easy.`,
+      detail: 'That meal supports the plan and keeps today moving.',
+    })
   }
 
   const handlePhotoFood = (food: Omit<FoodItem, 'id'>, mealId: MealId) => {
     const fullFood: FoodItem = {
-      id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      id: createFoodId(),
       ...food,
     }
     addFood(date, mealId, fullFood)
+    const mealName = dayData.meals.find((meal) => meal.id === mealId)?.name ?? 'Meal'
+    celebrateFoodLog(mealName, `${food.name} came in from your photo. Logged and done.`)
   }
 
   return (
     <div className="px-4 pt-6 pb-4 max-w-lg mx-auto space-y-4">
-      {/* Date nav + shopping list */}
+      {/* Date nav */}
       <div className="flex items-center justify-between">
         <PageHeader title="Nutrition" />
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShoppingOpen(true)}
-            className="p-1.5 rounded-lg bg-surface-700 text-slate-400 hover:text-slate-200"
-            title="Weekly Shopping List"
-          >
-            <ShoppingCartIcon className="w-4 h-4" />
-          </button>
           <button onClick={() => changeDate(-1)} className="p-1.5 rounded-lg bg-surface-700 text-slate-400">
             <ChevronLeftIcon className="w-4 h-4" />
           </button>
@@ -122,53 +186,61 @@ export default function NutritionPage() {
         </div>
       </div>
 
-      <NutritionSummary totals={totals} targets={NUTRITION_TARGETS} />
-
-      {/* Macro ring */}
-      <div className="bg-surface-800 rounded-2xl border border-surface-700 p-4">
-        <MacroRing
-          calories={totals.calories}
-          targetCalories={NUTRITION_TARGETS.calories}
-          protein={totals.protein}
-          targetProtein={NUTRITION_TARGETS.protein}
-          carbs={totals.carbs}
-          targetCarbs={NUTRITION_TARGETS.carbs}
-          fat={totals.fat}
-          targetFat={NUTRITION_TARGETS.fat}
-        />
-      </div>
-
-      {/* Water tracker */}
-      <div className="bg-surface-800 rounded-2xl border border-surface-700 p-4">
+      <div className="bg-surface-800 rounded-2xl border border-surface-700 p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-semibold text-slate-200">Water</p>
-            <p className="text-xs text-slate-500">{dayData.waterOz} / 96 oz goal</p>
+            <p className="text-xs text-slate-500 uppercase tracking-wide">Today Targets</p>
+            <p className="text-sm font-semibold text-slate-100">Next meal: {nextMeal?.name ?? 'Meal'}</p>
           </div>
+        </div>
+        <NutritionSummary totals={totals} targets={NUTRITION_TARGETS} title="Daily Nutrition" embedded />
+      </div>
+
+      <CelebrationBanner message={celebration} onDone={clearCelebration} />
+
+      {/* Meal Reminders */}
+      <div className="bg-surface-800 rounded-2xl border border-surface-700 overflow-hidden">
+        <button
+          onClick={() => setShowReminders((v) => !v)}
+          className="w-full flex items-center justify-between px-4 py-3"
+        >
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => updateWater(date, dayData.waterOz - 8)}
-              className="w-8 h-8 rounded-lg bg-surface-700 text-slate-300 font-bold text-lg flex items-center justify-center"
-            >
-              −
-            </button>
-            <span className="text-sm font-bold text-blue-400 w-10 text-center">
-              {dayData.waterOz}oz
-            </span>
-            <button
-              onClick={() => updateWater(date, dayData.waterOz + 8)}
-              className="w-8 h-8 rounded-lg bg-surface-700 text-slate-300 font-bold text-lg flex items-center justify-center"
-            >
-              +
-            </button>
+            <BellIcon className="w-4 h-4 text-accent" />
+            <span className="text-sm font-semibold text-slate-200">Meal Reminders</span>
           </div>
-        </div>
-        <div className="mt-2 h-2 bg-surface-700 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-blue-400 rounded-full transition-all"
-            style={{ width: `${Math.min(100, (dayData.waterOz / 96) * 100)}%` }}
-          />
-        </div>
+          <span className="text-xs text-slate-500">{showReminders ? 'Hide' : 'Set times'}</span>
+        </button>
+
+        {showReminders && (
+          <div className="px-4 pb-4 space-y-3 border-t border-surface-700 pt-3">
+            {permission === 'prompt' && (
+              <button
+                onClick={requestPermission}
+                className="w-full text-xs text-center text-accent font-semibold py-2 rounded-xl bg-accent/10 hover:bg-accent/20 transition-colors"
+              >
+                Enable notifications to get alerts when the app is open
+              </button>
+            )}
+            {reminders.map((r) => (
+              <div key={r.mealId} className="flex items-center gap-3">
+                <button
+                  onClick={() => toggle(r.mealId)}
+                  className={`w-9 h-5 rounded-full transition-colors shrink-0 ${r.enabled ? 'bg-accent' : 'bg-surface-600'}`}
+                >
+                  <span className={`block w-4 h-4 rounded-full bg-white shadow transition-transform mx-0.5 ${r.enabled ? 'translate-x-4' : 'translate-x-0'}`} />
+                </button>
+                <span className="text-sm text-slate-300 flex-1">{r.label}</span>
+                <input
+                  type="time"
+                  value={r.time}
+                  disabled={!r.enabled}
+                  onChange={(e) => setTime(r.mealId, e.target.value)}
+                  className="bg-surface-700 border border-surface-600 rounded-lg px-2 py-1 text-sm text-slate-100 disabled:opacity-40 focus:outline-none focus:border-accent"
+                />
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
@@ -214,9 +286,11 @@ export default function NutritionPage() {
         </>
       ) : (
         <MealSuggestions
-          meals={suggestedMeals}
+          meals={prioritizedSuggestedMeals}
           onLogMeal={handleLogSuggestedMeal}
           loggedMealIds={loggedMealIds}
+          totals={totals}
+          targets={NUTRITION_TARGETS}
         />
       )}
 
@@ -224,10 +298,9 @@ export default function NutritionPage() {
         open={addFoodOpen}
         onClose={() => setAddFoodOpen(false)}
         meals={dayData.meals}
+        initialMealId={activeMealId}
         onAdd={handleAddFood}
       />
-
-      <ShoppingList open={shoppingOpen} onClose={() => setShoppingOpen(false)} />
     </div>
   )
 }

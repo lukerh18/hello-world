@@ -1,5 +1,29 @@
 export type SupplementTimeBlock = 'morning' | 'pre-workout' | 'post-workout' | 'afternoon' | 'evening'
 
+export interface SupplementWindowMeta {
+  id: SupplementTimeBlock
+  label: string
+  timeHint: string
+  startHour: number
+  endHour: number
+}
+
+export const SUPPLEMENT_WINDOWS: SupplementWindowMeta[] = [
+  { id: 'morning',      label: 'Morning',      timeHint: '5:30–7:30 am', startHour: 5,  endHour: 9  },
+  { id: 'pre-workout',  label: 'Pre-Workout',  timeHint: '~9:15 am',     startHour: 9,  endHour: 11 },
+  { id: 'post-workout', label: 'Post-Workout', timeHint: '~11:00 am',    startHour: 11, endHour: 13 },
+  { id: 'afternoon',    label: 'Afternoon',    timeHint: '12:00 pm',     startHour: 12, endHour: 17 },
+  { id: 'evening',      label: 'Evening',      timeHint: '5:30–9:30 pm', startHour: 17, endHour: 24 },
+]
+
+export function getCurrentWindowId(): SupplementTimeBlock | null {
+  const h = new Date().getHours()
+  for (const w of SUPPLEMENT_WINDOWS) {
+    if (h >= w.startHour && h < w.endHour) return w.id
+  }
+  return null
+}
+
 export interface Supplement {
   id: string
   name: string

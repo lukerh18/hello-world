@@ -2,18 +2,87 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  /* ——— Surfaces ——— */
+  --chrome:     #070707;
+  --bg:         #0B0907;
+  --card:       #141009;
+  --input:      #1E1911;
+  --border:     #2B2215;
+  --border-2:   #312618;
+
+  /* ——— Accents ——— */
+  --amber:      #C8902A;
+  --amber-hi:   #D4A44A;
+  --amber-mute: #A7824A;
+  --sage:       #6B8A6E;
+
+  /* ——— Text ——— */
+  --text:       #F1EBDF;
+  --text-2:     #CEC4B2;
+  --text-3:     #9D9180;
+
+  /* ——— Semantic ——— */
+  --good:       #7A9E7E;
+  --warn:       #D4952A;
+  --crit:       #C04A3A;
+
+  /* ——— Type ——— */
+  --sans: "Inter Tight", "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* ——— Radii ——— */
+  --r-1:    6px;
+  --r-2:    10px;
+  --r-btn:  12px;
+  --r-3:    14px;
+  --r-card: 18px;
+  --r-pill: 999px;
+
+  /* ——— Spacing ——— */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+  --s-8: 64px;
+
+  /* ——— Effects ——— */
+  --card-inset: inset 0 1px 0 rgba(241, 235, 223, 0.06);
+  --shadow-md:  0 4px 12px rgba(0,0,0,0.35), 0 2px 4px rgba(0,0,0,0.25);
+  --shadow-lg:  0 24px 60px rgba(0,0,0,0.55), 0 6px 16px rgba(0,0,0,0.35);
+
+  /* ——— Legacy aliases (keep for Tailwind compat) ——— */
+  --bg-app:        var(--bg);
+  --text-primary:  var(--text);
+  --text-secondary: var(--text-2);
+  --border-subtle: var(--border-2);
+}
+
 @layer base {
   html {
-    background-color: #0B0907;
-    color: #EDE6D6;
+    background-color: var(--bg-app);
+    color: var(--text-primary);
     -webkit-tap-highlight-color: transparent;
+    height: 100%;
   }
 
   body {
     font-family: 'Inter', system-ui, sans-serif;
-    background-color: #0B0907;
+    background-color: var(--bg-app);
+    margin: 0;
+    min-height: 100%;
     min-height: 100dvh;
     overscroll-behavior: none;
+    color: var(--text-primary);
+  }
+
+  #root {
+    min-height: 100%;
+    min-height: 100dvh;
+    isolation: isolate;
   }
 
   input[type='number']::-webkit-inner-spin-button,
@@ -34,6 +103,16 @@
 
   .safe-top {
     padding-top: env(safe-area-inset-top);
+  }
+
+  .safe-x {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  .app-shell {
+    min-height: 100%;
+    min-height: 100dvh;
   }
 
   .no-scrollbar::-webkit-scrollbar {
@@ -58,6 +137,18 @@
     box-shadow: inset 0 1px 0 rgba(237, 230, 214, 0.05);
   }
 
+  .panel-surface {
+    border: 1px solid var(--border-subtle);
+    box-shadow:
+      inset 0 1px 0 rgba(241, 235, 223, 0.05),
+      0 10px 30px rgba(0, 0, 0, 0.3);
+    border-radius: 18px;
+  }
+
+  .text-secondary {
+    color: var(--text-secondary);
+  }
+
   /* Amber accent glow */
   .glow-accent {
     box-shadow: 0 0 16px 0 rgba(200, 144, 42, 0.18);
@@ -66,5 +157,10 @@
   /* Sage success glow */
   .glow-success {
     box-shadow: 0 0 16px 0 rgba(122, 158, 126, 0.2);
+  }
+
+  .focus-rivian:focus-visible {
+    outline: 2px solid var(--amber);
+    outline-offset: 2px;
   }
 }

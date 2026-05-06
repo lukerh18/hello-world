@@ -40,6 +40,30 @@ export default function ProgressPage() {
 
   const lbsToGoal = Math.max(0, latestWeight - DEFAULT_USER_PROFILE.goalWeightLbs)
   const totalLost = DEFAULT_USER_PROFILE.startingWeightLbs - latestWeight
+  const weekWindowStart = (() => {
+    const d = new Date()
+    d.setDate(d.getDate() - 7)
+    return d.toISOString().split('T')[0]
+  })()
+  const weeklyWorkoutsDone = workoutLogs.filter((log) => log.date >= weekWindowStart && Boolean(log.completedAt)).length
+  const weeklyProteinHits = nutritionLogs.filter((log) => {
+    if (log.date < weekWindowStart) return false
+    const protein = log.meals.flatMap((meal) => meal.foods).reduce((sum, food) => sum + food.protein, 0)
+    return protein >= 180
+  }).length
+  const supplementStore = (() => {
+    try {
+      return JSON.parse(localStorage.getItem('supplement_completion_v1') ?? '{}') as Record<string, { completed: string[] }>
+    } catch {
+      return {}
+    }
+  })()
+  const weeklySupplementRate = (() => {
+    const recent = Object.entries(supplementStore).filter(([date]) => date >= weekWindowStart)
+    if (recent.length === 0) return 0
+    const completed = recent.reduce((sum, [, value]) => sum + (value.completed?.length ?? 0), 0)
+    return Math.round((completed / (recent.length * 5)) * 100)
+  })()
 
   const strengthData = getLogsForExercise(selectedExercise).map((entry) => {
     const weights = entry.exercise.sets.filter((s) => s.completed && s.weight > 0).map((s) => s.weight)
@@ -104,6 +128,24 @@ export default function ProgressPage() {
           unit={lbsToGoal > 0 ? 'lbs' : undefined}
           color={lbsToGoal === 0 ? 'text-success' : 'text-slate-100'}
         />
+      </div>
+
+      <div className="bg-surface-800 rounded-2xl border border-surface-700 p-4">
+        <p className="text-sm font-semibold text-slate-200 mb-2">Weekly Body Adherence</p>
+        <div className="space-y-1.5 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-slate-400">Workouts completed</span>
+            <span className="text-slate-200">{weeklyWorkoutsDone} sessions</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-slate-400">Protein target days</span>
+            <span className="text-slate-200">{weeklyProteinHits} days</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-slate-400">Supplement adherence</span>
+            <span className="text-slate-200">{weeklySupplementRate}%</span>
+          </div>
+        </div>
       </div>
 
       {/* Tabs */}

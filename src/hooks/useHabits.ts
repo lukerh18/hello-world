@@ -15,15 +15,38 @@ interface HabitLogEntry {
   completedIds: string[]
   choreDone: boolean
   majorTask: string
+  meditationMinutes: number
+  bibleMinutes: number
+  readProverbs: boolean
+  fasterScaleLevel: number | null
+}
+
+interface HabitTimingPatterns {
+  [habitId: string]: {
+    avgMinute: number
+    count: number
+  }
 }
 
 const INITIAL_CONFIG: HabitConfig = { habits: DEFAULT_HABITS, northStar: '', weekFocus: '' }
+const TIMING_KEY = 'habit_timing_patterns_v1'
+
+function readTimingPatterns(): HabitTimingPatterns {
+  try {
+    const raw = localStorage.getItem(TIMING_KEY)
+    if (!raw) return {}
+    return JSON.parse(raw) as HabitTimingPatterns
+  } catch {
+    return {}
+  }
+}
 
 export function useHabits() {
   const { user } = useAuth()
   const [config, setConfigState] = useState<HabitConfig>(INITIAL_CONFIG)
   const [log, setLog] = useState<HabitLogEntry[]>([])
   const [loading, setLoading] = useState(true)
+  const [timingPatterns, setTimingPatterns] = useState<HabitTimingPatterns>(() => readTimingPatterns())
 
   const today = new Date().toISOString().split('T')[0]
   const dayOfWeek = new Date().getDay()
@@ -35,23 +58,33 @@ export function useHabits() {
     Promise.all([
       supabase.from('habit_config').select('*').eq('user_id', user.id).maybeSingle(),
       supabase.from('habit_log').select('*').eq('user_id', user.id).order('date', { ascending: false }).limit(90),
-    ]).then(([cfg, logs]) => {
-      if (cfg.data) {
-        const rawHabits = (cfg.data.habits as Habit[]) ?? DEFAULT_HABITS
-        setConfigState({
-          habits: rawHabits.map((h) => ({ ...h, category: normalizeCategory(h.category) })),
-          northStar: (cfg.data.north_star as string) ?? '',
-          weekFocus: (cfg.data.week_focus as string) ?? '',
-        })
-      }
-      setLog((logs.data ?? []).map((r) => ({
-        date: r.date as string,
-        completedIds: (r.completed_ids as string[]) ?? [],
-        choreDone: (r.chore_done as boolean) ?? false,
-        majorTask: (r.major_task as string) ?? '',
-      })))
-      setLoading(false)
-    })
+    ])
+      .then(([cfg, logs]) => {
+        if (cfg.data) {
+          const rawHabits = (cfg.data.habits as Habit[]) ?? DEFAULT_HABITS
+          setConfigState({
+            habits: rawHabits.map((h) => ({ ...h, category: normalizeCategory(h.category) })),
+            northStar: (cfg.data.north_star as string) ?? '',
+            weekFocus: (cfg.data.week_focus as string) ?? '',
+          })
+        }
+        setLog((logs.data ?? []).map((r) => ({
+          date: r.date as string,
+          completedIds: (r.completed_ids as string[]) ?? [],
+          choreDone: (r.chore_done as boolean) ?? false,
+          majorTask: (r.major_task as string) ?? '',
+          meditationMinutes: (r.meditation_minutes as number) ?? 0,
+          bibleMinutes: (r.bible_minutes as number) ?? 0,
+          readProverbs: (r.read_proverbs as boolean) ?? false,
+          fasterScaleLevel: (r.faster_scale_level as number | null) ?? null,
+        })))
+      })
+      .catch((error) => {
+        console.error('Failed to load habits data', error)
+      })
+      .finally(() => {
+        setLoading(false)
+      })
   }, [user])
 
   const saveConfig = useCallback(async (next: HabitConfig) => {
@@ -68,7 +101,16 @@ export function useHabits() {
 
   const updateTodayLog = useCallback(async (updater: (entry: HabitLogEntry) => HabitLogEntry) => {
     if (!user) return
-    const existing = log.find((e) => e.date === today) ?? { date: today, completedIds: [], choreDone: false, majorTask: '' }
+    const existing = log.find((e) => e.date === today) ?? {
+      date: today,
+      completedIds: [],
+      choreDone: false,
+      majorTask: '',
+      meditationMinutes: 0,
+      bibleMinutes: 0,
+      readProverbs: false,
+      fasterScaleLevel: null,
+    }
     const updated = updater(existing)
     await supabase.from('habit_log').upsert({
       user_id: user.id,
@@ -76,6 +118,10 @@ export function useHabits() {
       completed_ids: updated.completedIds,
       chore_done: updated.choreDone,
       major_task: updated.majorTask,
+      meditation_minutes: updated.meditationMinutes,
+      bible_minutes: updated.bibleMinutes,
+      read_proverbs: updated.readProverbs,
+      faster_scale_level: updated.fasterScaleLevel,
     }, { onConflict: 'user_id,date' })
     setLog((prev) => {
       const idx = prev.findIndex((e) => e.date === today)
@@ -84,19 +130,43 @@ export function useHabits() {
     })
   }, [user, log, today])
 
-  const todayEntry: HabitLogEntry = log.find((e) => e.date === today) ?? { date: today, completedIds: [], choreDone: false, majorTask: '' }
+  const todayEntry: HabitLogEntry = log.find((e) => e.date === today) ?? {
+    date: today,
+    completedIds: [],
+    choreDone: false,
+    majorTask: '',
+    meditationMinutes: 0,
+    bibleMinutes: 0,
+    readProverbs: false,
+    fasterScaleLevel: null,
+  }
   const todayHabits = config.habits.filter((h) => !h.weekdaysOnly || isWeekday)
 
   const isHabitDone = useCallback((id: string) => todayEntry.completedIds.includes(id), [todayEntry])
 
-  const toggleHabit = useCallback((id: string) => {
+  const toggleHabit = useCallback((id: string, completedAtMinute?: number) => {
+    const wasDone = todayEntry.completedIds.includes(id)
+
+    if (!wasDone && typeof completedAtMinute === 'number') {
+      setTimingPatterns((prev) => {
+        const prior = prev[id]
+        const count = (prior?.count ?? 0) + 1
+        const avgMinute = prior
+          ? Math.round((prior.avgMinute * prior.count + completedAtMinute) / count)
+          : Math.round(completedAtMinute)
+        const next = { ...prev, [id]: { avgMinute, count } }
+        localStorage.setItem(TIMING_KEY, JSON.stringify(next))
+        return next
+      })
+    }
+
     updateTodayLog((e) => ({
       ...e,
       completedIds: e.completedIds.includes(id)
         ? e.completedIds.filter((i) => i !== id)
         : [...e.completedIds, id],
     }))
-  }, [updateTodayLog])
+  }, [todayEntry.completedIds, updateTodayLog])
 
   const toggleChore = useCallback(() => {
     updateTodayLog((e) => ({ ...e, choreDone: !e.choreDone }))
@@ -104,6 +174,25 @@ export function useHabits() {
 
   const setMajorTask = useCallback((task: string) => {
     updateTodayLog((e) => ({ ...e, majorTask: task }))
+  }, [updateTodayLog])
+
+  const setMeditationMinutes = useCallback((minutes: number) => {
+    const normalized = Number.isFinite(minutes) ? Math.max(0, Math.round(minutes)) : 0
+    updateTodayLog((e) => ({ ...e, meditationMinutes: normalized }))
+  }, [updateTodayLog])
+
+  const setBibleMinutes = useCallback((minutes: number) => {
+    const normalized = Number.isFinite(minutes) ? Math.max(0, Math.round(minutes)) : 0
+    updateTodayLog((e) => ({ ...e, bibleMinutes: normalized }))
+  }, [updateTodayLog])
+
+  const setReadProverbs = useCallback((read: boolean) => {
+    updateTodayLog((e) => ({ ...e, readProverbs: read }))
+  }, [updateTodayLog])
+
+  const setFasterScaleLevel = useCallback((level: number | null) => {
+    const normalized = level === null ? null : Math.min(7, Math.max(1, Math.round(level)))
+    updateTodayLog((e) => ({ ...e, fasterScaleLevel: normalized }))
   }, [updateTodayLog])
 
   const addHabit = useCallback((habit: Omit<Habit, 'id'>) => {
@@ -141,18 +230,30 @@ export function useHabits() {
   const categoryTotal = (cat: Habit['category']) =>
     todayHabits.filter((h) => h.category === cat).length
 
+  const getPreferredHabitMinute = useCallback((id: string): number | null => {
+    return timingPatterns[id]?.avgMinute ?? null
+  }, [timingPatterns])
+
   return {
     habits: config.habits,
     todayHabits,
     northStar: config.northStar,
     weekFocus: config.weekFocus,
     majorTask: todayEntry.majorTask,
+    meditationMinutes: todayEntry.meditationMinutes,
+    bibleMinutes: todayEntry.bibleMinutes,
+    readProverbs: todayEntry.readProverbs,
+    fasterScaleLevel: todayEntry.fasterScaleLevel,
     loading,
     isHabitDone,
     isChoreDone: todayEntry.choreDone,
     toggleHabit,
     toggleChore,
     setMajorTask,
+    setMeditationMinutes,
+    setBibleMinutes,
+    setReadProverbs,
+    setFasterScaleLevel,
     addHabit,
     deleteHabit,
     setNorthStar,
@@ -162,5 +263,6 @@ export function useHabits() {
     totalCount,
     categoryDone,
     categoryTotal,
+    getPreferredHabitMinute,
   }
 }

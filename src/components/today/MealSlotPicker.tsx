@@ -1,6 +1,6 @@
 import { XMarkIcon, PlusIcon } from '@heroicons/react/24/outline'
-import { getPresetsByCategory } from '../../data/mealLibrary'
 import type { MealPreset } from '../../data/mealLibrary'
+import { useMealPresets } from '../../hooks/useMealPresets'
 
 interface MealSlotPickerProps {
   open: boolean
@@ -12,6 +12,8 @@ interface MealSlotPickerProps {
 }
 
 export function MealSlotPicker({ open, slotLabel, category, onSelect, onCustom, onClose }: MealSlotPickerProps) {
+  const { getPresetsByCategory } = useMealPresets()
+
   if (!open) return null
 
   const presets = getPresetsByCategory(category)

@@ -1,21 +1,32 @@
-import { useState, useRef } from 'react'
+import { useCallback, useState, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   CheckCircleIcon as CheckOutline,
   PlusIcon, TrashIcon, ChevronDownIcon, ChevronUpIcon,
-  BookOpenIcon, PencilSquareIcon, BoltIcon, HeartIcon, SparklesIcon,
+  BookOpenIcon, PencilSquareIcon, BoltIcon, HeartIcon, SparklesIcon, ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline'
 import { CheckCircleIcon as CheckSolid } from '@heroicons/react/24/solid'
 import { useHabits } from '../hooks/useHabits'
 import { useJournal } from '../hooks/useJournal'
 import { useReadingLog } from '../hooks/useReadingLog'
 import { useGoals } from '../hooks/useGoals'
+import { useEsvProverbs } from '../hooks/useEsvProverbs'
 import { CATEGORY_META } from '../data/habits'
+import { FASTER_STAGES, getFasterStage } from '../data/fasterScale'
 import type { HabitCategory, Habit } from '../data/habits'
 import { celebrateSingle, celebrateBlock } from '../utils/celebrate'
+import { Modal } from '../components/shared/Modal'
+import { CelebrationBanner, type CelebrationMessage } from '../components/shared/CelebrationBanner'
 
 const CATEGORY_ORDER: HabitCategory[] = ['spirit', 'soul_mind', 'soul_emotions', 'soul_will']
 const EMOJI_OPTIONS = ['🙏', '📓', '📖', '🛏️', '🚿', '💡', '👨‍👧‍👦', '🏃', '🧘', '📚', '✍️', '💪', '🎯', '🌅', '🧹', '💻', '❤️', '🌿', '⭐', '🌙', '✅']
+const ESV_ATTRIBUTION = 'Scripture quotations are from the ESV® Bible (The Holy Bible, English Standard Version®), © 2001 by Crossway, a publishing ministry of Good News Publishers. Used by permission. All rights reserved.'
+interface FasterReflectionEntry {
+  behavior: string
+  affectsMe: string
+  affectsOthers: string
+  benefit: string
+}
 
 // ── Inline editable text ──────────────────────────────────────────────────────
 function InlineEdit({ value, placeholder, onSave, multiline = false, className = '' }: {
@@ -111,6 +122,8 @@ export default function HabitsPage() {
   const {
     todayHabits, isHabitDone, toggleHabit,
     majorTask, setMajorTask, addHabit, deleteHabit, streak, doneCount, totalCount,
+    meditationMinutes, bibleMinutes, readProverbs, fasterScaleLevel,
+    setMeditationMinutes, setBibleMinutes, setReadProverbs, setFasterScaleLevel,
   } = useHabits()
   const { todayContent, history: journalHistory, saveToday: saveJournal } = useJournal()
   const { todayEntry: readingToday, recentBook, totalPagesCurrentBook, logToday: logReading } = useReadingLog()
@@ -118,6 +131,48 @@ export default function HabitsPage() {
 
   const allDone = doneCount === totalCount && totalCount > 0
   const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+  const todayKey = new Date().toISOString().split('T')[0]
+  const [fasterReflection, setFasterReflection] = useState<FasterReflectionEntry>(() => {
+    try {
+      const raw = localStorage.getItem(`faster_reflection_${todayKey}`)
+      if (!raw) return { behavior: '', affectsMe: '', affectsOthers: '', benefit: '' }
+      const parsed = JSON.parse(raw) as Partial<FasterReflectionEntry>
+      return {
+        behavior: parsed.behavior ?? '',
+        affectsMe: parsed.affectsMe ?? '',
+        affectsOthers: parsed.affectsOthers ?? '',
+        benefit: parsed.benefit ?? '',
+      }
+    } catch {
+      return { behavior: '', affectsMe: '', affectsOthers: '', benefit: '' }
+    }
+  })
+  const [fasterPartOne, setFasterPartOne] = useState<Record<number, string[]>>(() => {
+    try {
+      const raw = localStorage.getItem(`faster_part_one_${todayKey}`)
+      if (!raw) return {}
+      return JSON.parse(raw) as Record<number, string[]>
+    } catch {
+      return {}
+    }
+  })
+  const [boxBreathingMinutes, setBoxBreathingMinutes] = useState<number>(() => {
+    try {
+      const raw = localStorage.getItem(`box_breathing_minutes_${todayKey}`)
+      if (!raw) return 0
+      const parsed = Number.parseInt(raw, 10)
+      return Number.isFinite(parsed) ? Math.max(0, parsed) : 0
+    } catch {
+      return 0
+    }
+  })
+  const [spouseConnectionDone, setSpouseConnectionDone] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(`spouse_connection_done_${todayKey}`) === '1'
+    } catch {
+      return false
+    }
+  })
 
   // Journal state
   const [journalDraft, setJournalDraft] = useState(todayContent)
@@ -141,13 +196,36 @@ export default function HabitsPage() {
   const [newCategory, setNewCategory] = useState<HabitCategory>('spirit')
   const [newIcon, setNewIcon] = useState('⭐')
   const [newWeekdaysOnly, setNewWeekdaysOnly] = useState(false)
+  const [celebration, setCelebration] = useState<CelebrationMessage | null>(null)
   const prevDoneRef = useRef(doneCount)
 
+  const showCelebration = (message: Omit<CelebrationMessage, 'id'>) => {
+    setCelebration({ ...message, id: Date.now() })
+  }
+  const clearCelebration = useCallback(() => setCelebration(null), [])
+
   const handleToggle = (id: string, done: boolean) => {
-    toggleHabit(id)
-    if (!done) celebrateSingle()
+    const now = new Date()
+    const minute = now.getHours() * 60 + now.getMinutes()
+    toggleHabit(id, minute)
+    const habit = todayHabits.find((item) => item.id === id)
+    if (!done) {
+      celebrateSingle()
+      showCelebration({
+        tone: 'warm',
+        title: `${habit?.name ?? 'Habit'} complete. Well done.`,
+        detail: 'That small faithful action counts today.',
+      })
+    }
     const newDone = done ? doneCount - 1 : doneCount + 1
-    if (newDone === totalCount) celebrateBlock()
+    if (newDone === totalCount) {
+      celebrateBlock()
+      showCelebration({
+        tone: 'success',
+        title: 'Daily block complete. That is a real win.',
+        detail: 'Balanced consistency beats pressure. You showed up today.',
+      })
+    }
     prevDoneRef.current = newDone
   }
 
@@ -161,6 +239,53 @@ export default function HabitsPage() {
     (acc, cat) => { acc[cat] = todayHabits.filter((h) => h.category === cat); return acc },
     { spirit: [], soul_mind: [], soul_emotions: [], soul_will: [] }
   )
+  const todayProverbs = new Date().getDate()
+  const meditationDone = meditationMinutes >= 10
+  const bibleDone = bibleMinutes >= 15
+  const fastingRisk = fasterScaleLevel !== null && fasterScaleLevel >= 6
+  const fastingHealthy = fasterScaleLevel !== null && fasterScaleLevel <= 3
+  const currentFasterStage = getFasterStage(fasterScaleLevel)
+  const [showProverbsModal, setShowProverbsModal] = useState(false)
+  const proverbs = useEsvProverbs(todayProverbs)
+  const boxBreathingDone = boxBreathingMinutes >= 10
+  const currentHour = new Date().getHours()
+  const isNightWindow = currentHour >= 21
+
+  const updateFasterReflection = (patch: Partial<FasterReflectionEntry>) => {
+    setFasterReflection((prev) => {
+      const next = { ...prev, ...patch }
+      localStorage.setItem(`faster_reflection_${todayKey}`, JSON.stringify(next))
+      return next
+    })
+  }
+
+  const togglePartOneSignal = (level: number, signal: string) => {
+    setFasterPartOne((prev) => {
+      const current = prev[level] ?? []
+      const nextForLevel = current.includes(signal)
+        ? current.filter((s) => s !== signal)
+        : [...current, signal]
+      const next = { ...prev, [level]: nextForLevel }
+      localStorage.setItem(`faster_part_one_${todayKey}`, JSON.stringify(next))
+      return next
+    })
+  }
+
+  const addBoxBreathingMinutes = (amount: number) => {
+    setBoxBreathingMinutes((prev) => {
+      const next = Math.max(0, prev + amount)
+      localStorage.setItem(`box_breathing_minutes_${todayKey}`, String(next))
+      return next
+    })
+  }
+
+  const toggleSpouseConnection = () => {
+    setSpouseConnectionDone((prev) => {
+      const next = !prev
+      localStorage.setItem(`spouse_connection_done_${todayKey}`, next ? '1' : '0')
+      return next
+    })
+  }
 
   const SpiritSection = (
     <>
@@ -186,6 +311,214 @@ export default function HabitsPage() {
         ))}
       </div>
 
+      {/* Spiritual practice protocol */}
+      <div className="bg-surface-800 rounded-2xl px-4 py-3 space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-[10px] uppercase tracking-widest font-semibold text-violet-300">Daily Spiritual Practice</p>
+          <span className="text-[10px] text-slate-500">Meditation + Bible + FASTer</span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div className="bg-surface-700 rounded-xl px-3 py-2.5 space-y-1.5">
+            <p className="text-[10px] text-slate-500 uppercase tracking-wide">Meditation</p>
+            <div className="flex items-end justify-between">
+              <p className={`text-lg font-semibold ${meditationDone ? 'text-success' : 'text-slate-200'}`}>{meditationMinutes}m</p>
+              <p className="text-[10px] text-slate-500">Target 10m</p>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setMeditationMinutes(meditationMinutes + 5)} className="flex-1 rounded-lg bg-violet-400/15 text-violet-300 text-xs py-1.5">+5m</button>
+              <button onClick={() => setMeditationMinutes(Math.max(0, meditationMinutes - 5))} className="flex-1 rounded-lg bg-surface-600 text-slate-300 text-xs py-1.5">-5m</button>
+            </div>
+          </div>
+
+          <div className="bg-surface-700 rounded-xl px-3 py-2.5 space-y-1.5">
+            <p className="text-[10px] text-slate-500 uppercase tracking-wide">Bible Reading</p>
+            <div className="flex items-end justify-between">
+              <p className={`text-lg font-semibold ${bibleDone ? 'text-success' : 'text-slate-200'}`}>{bibleMinutes}m</p>
+              <p className="text-[10px] text-slate-500">Target 15m</p>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setBibleMinutes(bibleMinutes + 5)} className="flex-1 rounded-lg bg-violet-400/15 text-violet-300 text-xs py-1.5">+5m</button>
+              <button onClick={() => setBibleMinutes(Math.max(0, bibleMinutes - 5))} className="flex-1 rounded-lg bg-surface-600 text-slate-300 text-xs py-1.5">-5m</button>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-surface-700 rounded-xl px-3 py-2.5 space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] text-slate-500 uppercase tracking-wide">Box Breathing</p>
+            <p className={`text-[10px] font-semibold ${boxBreathingDone ? 'text-success' : 'text-slate-500'}`}>
+              {boxBreathingMinutes}/10m
+            </p>
+          </div>
+          <p className="text-xs text-slate-400">
+            4 sec inhale -&gt; 4 sec hold -&gt; 4 sec exhale -&gt; 4 sec hold. Repeat with slow attention.
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => addBoxBreathingMinutes(2)}
+              className="flex-1 rounded-lg bg-violet-400/15 text-violet-300 text-xs py-1.5"
+            >
+              +2m quick reset
+            </button>
+            <button
+              onClick={() => addBoxBreathingMinutes(5)}
+              className="flex-1 rounded-lg bg-surface-600 text-slate-300 text-xs py-1.5"
+            >
+              +5m focused
+            </button>
+            <button
+              onClick={() => {
+                setBoxBreathingMinutes(0)
+                localStorage.setItem(`box_breathing_minutes_${todayKey}`, '0')
+              }}
+              className="rounded-lg bg-surface-600 px-2.5 text-slate-400 text-xs"
+            >
+              Reset
+            </button>
+          </div>
+          {boxBreathingDone && (
+            <p className="text-xs text-success">Great work. You hit your 10-minute restoration breathing target today.</p>
+          )}
+        </div>
+
+        <div className="bg-surface-700 rounded-xl px-3 py-2.5 space-y-2">
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <p className="text-sm text-slate-200">Proverbs {todayProverbs}</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">Read Proverbs for today and your regular Bible plan.</p>
+            </div>
+            <button onClick={() => setShowProverbsModal(true)} className="text-xs text-violet-300 font-semibold whitespace-nowrap">
+              Read in app
+            </button>
+          </div>
+          <button
+            onClick={() => setReadProverbs(!readProverbs)}
+            className={`w-full rounded-lg py-2 text-xs font-semibold transition-colors ${readProverbs ? 'bg-success/20 text-success' : 'bg-surface-600 text-slate-300'}`}
+          >
+            {readProverbs ? '✓ Proverbs read today' : 'Mark Proverbs complete'}
+          </button>
+          {!proverbs.hasApiKey && (
+            <p className="text-[10px] text-slate-500">
+              Add <code className="text-slate-400">VITE_ESV_API_KEY</code> to enable in-app ESV text.
+            </p>
+          )}
+        </div>
+
+        <div className="bg-surface-700 rounded-xl px-3 py-2.5 space-y-2">
+          <p className="text-[10px] text-slate-500 uppercase tracking-wide">FASTer Scale Check-In</p>
+          <p className="text-xs text-slate-500">
+            Track your lowest point today, then choose one restoring action.
+          </p>
+          <div className="grid grid-cols-1 gap-2">
+            {FASTER_STAGES.map((item) => (
+              <button
+                key={item.level}
+                onClick={() => setFasterScaleLevel(item.level)}
+                className={`text-left rounded-lg px-2.5 py-2 text-xs border transition-colors ${
+                  fasterScaleLevel === item.level
+                    ? 'bg-violet-400/15 border-violet-300 text-violet-200'
+                    : 'bg-surface-600 border-surface-600 text-slate-300 hover:border-slate-500'
+                }`}
+              >
+                <p><span className="font-semibold">{item.level}. </span>{item.label}</p>
+                <p className="text-[11px] text-slate-400 mt-1">{item.summary}</p>
+              </button>
+            ))}
+          </div>
+          {currentFasterStage && (
+            <div className="rounded-lg bg-surface-600/70 border border-surface-500 px-3 py-2 space-y-1.5">
+              <p className="text-[10px] uppercase tracking-wide text-slate-500">
+                Current stage signals
+              </p>
+              {currentFasterStage.signals.map((signal) => (
+                <p key={signal} className="text-xs text-slate-300">- {signal}</p>
+              ))}
+            </div>
+          )}
+          {currentFasterStage && (
+            <div className="rounded-lg bg-surface-600/70 border border-surface-500 px-3 py-2 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] uppercase tracking-wide text-slate-500">
+                  Part one behaviors I identify with
+                </p>
+                <p className="text-[10px] text-slate-500">
+                  {(fasterPartOne[currentFasterStage.level] ?? []).length}/{currentFasterStage.signals.length}
+                </p>
+              </div>
+              {currentFasterStage.signals.map((signal) => {
+                const checked = (fasterPartOne[currentFasterStage.level] ?? []).includes(signal)
+                return (
+                  <button
+                    key={`check_${currentFasterStage.level}_${signal}`}
+                    onClick={() => togglePartOneSignal(currentFasterStage.level, signal)}
+                    className={`w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors ${
+                      checked
+                        ? 'bg-violet-400/15 text-violet-200'
+                        : 'bg-surface-600 text-slate-300 hover:bg-surface-500'
+                    }`}
+                  >
+                    <span className="text-sm leading-none">{checked ? '✓' : '○'}</span>
+                    <span>{signal}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+          {currentFasterStage && (
+            <p className={`text-xs ${fastingHealthy ? 'text-success' : fastingRisk ? 'text-danger' : 'text-amber-300'}`}>
+              Current state: {currentFasterStage.label}. {fastingRisk ? 'Pause and restore now to avoid relapse.' : 'Keep choosing restorative actions today.'}
+            </p>
+          )}
+          {fastingRisk && (
+            <div className="flex items-start gap-2 bg-danger/10 border border-danger/30 rounded-lg px-2.5 py-2">
+              <ExclamationTriangleIcon className="w-4 h-4 text-danger shrink-0 mt-0.5" />
+              <p className="text-xs text-red-300 leading-relaxed">High-risk zone. Do one restoring action now: breathe for 2 minutes, pray, text someone safe, and step away from the trigger.</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <Modal open={showProverbsModal} onClose={() => setShowProverbsModal(false)} title={proverbs.title}>
+        <div className="space-y-3">
+          {proverbs.loading && (
+            <div className="space-y-2 animate-pulse">
+              <div className="h-3 rounded bg-white/10 w-full" />
+              <div className="h-3 rounded bg-white/10 w-11/12" />
+              <div className="h-3 rounded bg-white/10 w-10/12" />
+            </div>
+          )}
+
+          {proverbs.error && !proverbs.loading && (
+            <div className="space-y-2">
+              <p className="text-sm text-red-300">{proverbs.error}</p>
+              <a
+                href={`https://www.biblegateway.com/passage/?search=Proverbs+${todayProverbs}&version=ESV`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block text-xs text-violet-300 font-semibold"
+              >
+                Open Proverbs {todayProverbs} in browser
+              </a>
+            </div>
+          )}
+
+          {proverbs.content && !proverbs.loading && (
+            <>
+              <p className="text-sm text-slate-200 whitespace-pre-line leading-relaxed">{proverbs.content}</p>
+              <p className="text-[10px] text-slate-500 border-t border-surface-700 pt-2">{proverbs.copyright || ESV_ATTRIBUTION}</p>
+            </>
+          )}
+
+          <button
+            onClick={() => { setReadProverbs(true); setShowProverbsModal(false) }}
+            className="w-full rounded-xl bg-success/20 text-success text-sm font-semibold py-2.5"
+          >
+            Mark Proverbs complete
+          </button>
+        </div>
+      </Modal>
+
       {/* Journal */}
       <div className="bg-surface-800 rounded-2xl px-4 py-3">
         <button onClick={() => setJournalOpen((p) => !p)} className="flex items-center gap-2 w-full text-left">
@@ -210,6 +543,57 @@ export default function HabitsPage() {
             ))}
           </div>
         )}
+      </div>
+
+      <div className="bg-surface-800 rounded-2xl px-4 py-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <p className="text-[10px] text-violet-300 uppercase tracking-widest font-semibold">Night Check-In</p>
+          <p className={`text-[10px] ${isNightWindow ? 'text-success' : 'text-slate-500'}`}>
+            {isNightWindow ? '9 PM window open' : 'Before bed target'}
+          </p>
+        </div>
+        <p className="text-xs text-slate-500">
+          At around 9:00 PM, connect with your spouse, then complete Part Two before sleep.
+        </p>
+        <button
+          onClick={toggleSpouseConnection}
+          className={`w-full rounded-lg py-2 text-xs font-semibold transition-colors ${
+            spouseConnectionDone ? 'bg-success/20 text-success' : 'bg-surface-700 text-slate-300'
+          }`}
+        >
+          {spouseConnectionDone ? '✓ Spouse connection completed (9 PM)' : 'Mark spouse connection complete (9 PM)'}
+        </button>
+        <div className="space-y-2 border-t border-surface-700 pt-2">
+          <p className="text-[10px] text-slate-500 uppercase tracking-wide">Part Two Reflection (Before Bed)</p>
+          <input
+            type="text"
+            value={fasterReflection.behavior}
+            onChange={(e) => updateFasterReflection({ behavior: e.target.value })}
+            placeholder="Most powerful behavior today"
+            className="w-full bg-surface-700 border border-surface-600 rounded-lg px-2.5 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-violet-400"
+          />
+          <input
+            type="text"
+            value={fasterReflection.affectsMe}
+            onChange={(e) => updateFasterReflection({ affectsMe: e.target.value })}
+            placeholder="How did it affect me in the moment?"
+            className="w-full bg-surface-700 border border-surface-600 rounded-lg px-2.5 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-violet-400"
+          />
+          <input
+            type="text"
+            value={fasterReflection.affectsOthers}
+            onChange={(e) => updateFasterReflection({ affectsOthers: e.target.value })}
+            placeholder="How did it affect people I love?"
+            className="w-full bg-surface-700 border border-surface-600 rounded-lg px-2.5 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-violet-400"
+          />
+          <input
+            type="text"
+            value={fasterReflection.benefit}
+            onChange={(e) => updateFasterReflection({ benefit: e.target.value })}
+            placeholder="Why did I do it? What benefit was I seeking?"
+            className="w-full bg-surface-700 border border-surface-600 rounded-lg px-2.5 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-violet-400"
+          />
+        </div>
       </div>
     </>
   )
@@ -245,10 +629,19 @@ export default function HabitsPage() {
                 placeholder="Book title…"
                 className="w-full bg-surface-700 border border-surface-600 rounded-xl px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-amber-400" />
               <div className="flex gap-2">
-                <input type="number" min={0} value={readingPages} onChange={(e) => setReadingPages(e.target.value)}
+                <input type="number" inputMode="numeric" pattern="[0-9]*" min={0} value={readingPages} onChange={(e) => setReadingPages(e.target.value)}
                   placeholder="Pages today"
                   className="flex-1 bg-surface-700 border border-surface-600 rounded-xl px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-amber-400" />
-                <button onClick={() => { logReading(readingBook || recentBook, parseInt(readingPages) || 0); setReadingOpen(false) }}
+                <button onClick={() => {
+                  logReading(readingBook || recentBook, parseInt(readingPages) || 0)
+                  celebrateSingle()
+                  showCelebration({
+                    tone: 'warm',
+                    title: 'Reading logged. Nice work feeding your mind.',
+                    detail: 'That is Soul progress, one page at a time.',
+                  })
+                  setReadingOpen(false)
+                }}
                   disabled={!(readingBook || recentBook)}
                   className="px-4 py-2 rounded-xl bg-amber-400/20 text-amber-300 text-sm font-semibold disabled:opacity-40">Log</button>
               </div>
@@ -306,6 +699,8 @@ export default function HabitsPage() {
       </div>
 
       {tab === 'spirit' ? SpiritSection : SoulSection}
+
+      <CelebrationBanner message={celebration} onDone={clearCelebration} />
 
       {/* ── Add habit ── */}
       {showAddForm ? (

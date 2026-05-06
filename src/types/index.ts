@@ -66,6 +66,10 @@ export interface SetLog {
   reps: number
   completed: boolean
   rpe?: number
+  suggestedLoad?: number
+  acceptedSuggestion?: boolean
+  progressionReason?: string
+  roundIndex?: number
 }
 
 export interface ExerciseLog {
@@ -73,6 +77,7 @@ export interface ExerciseLog {
   exerciseName: string
   sets: SetLog[]
   targetWeight?: number
+  supersetGroupId?: string
 }
 
 export interface WorkoutLog {
@@ -87,6 +92,34 @@ export interface WorkoutLog {
   notes?: string
 }
 
+// ─── Movement Snacks ──────────────────────────────────────────────────────────
+
+export type MovementType = 'walk' | 'call_walk' | 'stretch' | 'squats' | 'pushups' | 'mobility' | 'custom'
+export type MovementDayMode = 'heavy_workout' | 'light_movement'
+export type MovementDayModeSource = 'workout_plan' | 'default'
+
+export interface MovementLogEntry {
+  id: string
+  date: string
+  type: MovementType
+  label: string
+  minutes?: number
+  count?: number
+  note?: string
+  completedAt: string
+}
+
+export interface MovementDayPlan {
+  date: string
+  mode: MovementDayMode
+  modeSource: MovementDayModeSource
+  modeReason: string
+  targetBreaks: number
+  targetMinutes: number
+  targetReps: number
+  quietUntil?: string
+}
+
 // ─── Nutrition ────────────────────────────────────────────────────────────────
 
 export interface FoodItem {
@@ -96,6 +129,7 @@ export interface FoodItem {
   protein: number
   carbs: number
   fat: number
+  sugar?: number
   servingSize?: string
 }
 
@@ -117,6 +151,7 @@ export interface NutritionTargets {
   protein: number
   carbs: number
   fat: number
+  sugar?: number
 }
 
 export interface MacroTotals {
@@ -124,6 +159,7 @@ export interface MacroTotals {
   protein: number
   carbs: number
   fat: number
+  sugar: number
 }
 
 // ─── Body Metrics ─────────────────────────────────────────────────────────────

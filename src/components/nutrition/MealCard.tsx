@@ -37,7 +37,7 @@ export function MealCard({ meal, onAddFood, onDeleteFood }: MealCardProps) {
               <div className="min-w-0">
                 <p className="text-sm text-slate-200 truncate">{food.name}</p>
                 <p className="text-xs text-slate-500">
-                  {food.calories} kcal · P {food.protein}g · C {food.carbs}g · F {food.fat}g
+                  {food.calories} kcal · P {food.protein}g · C {food.carbs}g · F {food.fat}g{food.sugar != null ? ` · Sug ${food.sugar}g` : ''}
                 </p>
               </div>
               <button

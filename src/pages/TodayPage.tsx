@@ -1,33 +1,107 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useCurrentWeek } from '../hooks/useCurrentWeek'
 import { useWorkoutLog } from '../hooks/useWorkoutLog'
 import { useNutritionLog } from '../hooks/useNutritionLog'
 import { useBodyMetrics } from '../hooks/useBodyMetrics'
 import { useSettings } from '../hooks/useSettings'
-import { useHabits } from '../hooks/useHabits'
-import { useGoogleCalendar } from '../hooks/useGoogleCalendar'
-import { useDailyAgenda } from '../hooks/useDailyAgenda'
+import { useMealReminders } from '../hooks/useMealReminders'
+import { useWeeklyStreaks } from '../hooks/useWeeklyStreaks'
 import { getWorkoutForDay } from '../data/program'
 import { DEFAULT_USER_PROFILE, NUTRITION_TARGETS } from '../data/userProfile'
-import { AgendaBlock } from '../components/today/AgendaBlock'
-import { DayPlan } from '../components/today/DayPlan'
+import { OuraCard } from '../components/today/OuraCard'
+import { SupplementCard } from '../components/today/SupplementCard'
+import { WeeklyStreakCard } from '../components/today/WeeklyStreakCard'
+import { NutritionSummary } from '../components/nutrition/NutritionSummary'
 import { Button } from '../components/shared/Button'
 import {
-  MORNING_SUPPLEMENTS, PRE_WORKOUT_SUPPLEMENTS, POST_WORKOUT_SUPPLEMENTS,
-  AFTERNOON_SUPPLEMENTS, EVENING_SUPPLEMENTS,
-} from '../data/supplements'
-import { SLOT_TO_MEAL_ID } from '../data/mealLibrary'
-import type { MealPreset } from '../data/mealLibrary'
-import {
-  Cog6ToothIcon, ScaleIcon, XMarkIcon, ChevronDownIcon, ChevronUpIcon,
-  CalendarDaysIcon, ArrowPathIcon,
+  ScaleIcon, XMarkIcon, BoltIcon, FireIcon, HeartIcon, BellIcon, CheckCircleIcon,
 } from '@heroicons/react/24/outline'
-import type { FoodItem, DayOfWeek } from '../types'
+import { CheckCircleIcon as CheckCircleSolid } from '@heroicons/react/24/solid'
+import type { DayOfWeek } from '../types'
+
+function usePullToRefresh(onRefresh: () => Promise<void>) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [indicator, setIndicator] = useState(0) // 0=hidden, >0=pull px, -1=refreshing
+
+  const isRefreshingRef = useRef(false)
+  const stableRefresh = useRef(onRefresh)
+  stableRefresh.current = onRefresh
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+
+    const THRESHOLD = 72
+    let startY = 0
+    let active = false
+    let pullY = 0
+
+    function findScrollParent(): HTMLElement | null {
+      let node: HTMLElement | null = el!.parentElement
+      while (node) {
+        if (window.getComputedStyle(node).overflowY !== 'visible') return node
+        node = node.parentElement
+      }
+      return null
+    }
+
+    function onStart(e: TouchEvent) {
+      if (isRefreshingRef.current) return
+      startY = e.touches[0].clientY
+      active = false
+      pullY = 0
+    }
+
+    function onMove(e: TouchEvent) {
+      if (isRefreshingRef.current) return
+      const scrollParent = findScrollParent()
+      if (scrollParent && scrollParent.scrollTop > 0) return
+      const dy = e.touches[0].clientY - startY
+      if (dy <= 0) {
+        if (active) { active = false; pullY = 0; setIndicator(0) }
+        return
+      }
+      e.preventDefault()
+      active = true
+      pullY = Math.min(dy * 0.4, THRESHOLD)
+      setIndicator(pullY)
+    }
+
+    function onEnd() {
+      if (!active) return
+      active = false
+      if (pullY >= THRESHOLD && !isRefreshingRef.current) {
+        isRefreshingRef.current = true
+        setIndicator(-1)
+        stableRefresh.current().finally(() => {
+          isRefreshingRef.current = false
+          pullY = 0
+          setIndicator(0)
+        })
+      } else {
+        pullY = 0
+        setIndicator(0)
+      }
+    }
+
+    el.addEventListener('touchstart', onStart, { passive: true })
+    el.addEventListener('touchmove', onMove, { passive: false })
+    el.addEventListener('touchend', onEnd, { passive: true })
+    return () => {
+      el.removeEventListener('touchstart', onStart)
+      el.removeEventListener('touchmove', onMove)
+      el.removeEventListener('touchend', onEnd)
+    }
+  }, [])
+
+  return { containerRef, indicator }
+}
 
 function getDayOfWeek(): DayOfWeek {
   const days: DayOfWeek[] = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday']
-  return days[new Date().getDay()]
+  const todayStr = new Date().toISOString().split('T')[0]
+  return days[new Date(todayStr + 'T12:00:00').getDay()]
 }
 
 function getGreeting(): string {
@@ -37,67 +111,45 @@ function getGreeting(): string {
   return 'Good evening'
 }
 
-function daysUntil(dateStr: string): number {
-  return Math.max(0, Math.ceil((new Date(dateStr + 'T00:00:00').getTime() - Date.now()) / 86400000))
-}
-
-function currentTimeBlock(): 'morning' | 'afternoon' | 'evening' {
-  const h = new Date().getHours()
-  if (h < 12) return 'morning'
-  if (h < 18) return 'afternoon'
-  return 'evening'
-}
-
 interface TodayPageProps { onOpenSettings?: () => void }
 
 export default function TodayPage({ onOpenSettings }: TodayPageProps) {
   const navigate = useNavigate()
-  const { settings } = useSettings()
+  const { settings, loading: settingsLoading } = useSettings()
   const startDate = settings.programStartDate || new Date().toISOString().split('T')[0]
   const { week, phase } = useCurrentWeek(startDate)
-  const { getTodayLog, getCompletedDates } = useWorkoutLog()
-  const { getDayTotals, addFood, getByDate } = useNutritionLog()
-  const { latestWeight, metrics, addWeightEntry } = useBodyMetrics()
-  const { isChecked, toggleItem, checkAll } = useDailyAgenda()
-  const {
-    todayHabits, isHabitDone, toggleHabit,
-    majorTask, setMajorTask, streak,
-  } = useHabits()
-  const gcal = useGoogleCalendar(settings.googleClientId ?? '')
+  const { getTodayLog, getLogByDate, loading: workoutLoading, refresh: refreshWorkout } = useWorkoutLog()
+  const { getDayTotals, getByDate, loading: nutritionLoading, refresh: refreshNutrition } = useNutritionLog()
+  const { latestWeight, metrics, addWeightEntry, refresh: refreshMetrics } = useBodyMetrics()
+  const { getDueReminders } = useMealReminders()
+
+  const handleRefresh = useCallback(async () => {
+    refreshNutrition()
+    refreshWorkout()
+    refreshMetrics()
+    await new Promise((resolve) => setTimeout(resolve, 1200))
+  }, [refreshNutrition, refreshWorkout, refreshMetrics])
+
+  const { containerRef, indicator } = usePullToRefresh(handleRefresh)
 
   const [weightInput, setWeightInput] = useState('')
-  const [supplementsOpen, setSupplementsOpen] = useState(false)
-  // calendar event checked state lives in useDailyAgenda (checked_ids)
-  const [checkedEventIds, setCheckedEventIds] = useState<string[]>([])
 
   const today = new Date().toISOString().split('T')[0]
   const todayLog = getTodayLog()
   const todayWorkout = getWorkoutForDay(getDayOfWeek())
   const totals = getDayTotals(today)
-  const completedDates = getCompletedDates()
-  const dayData = getByDate(today)
-  const block = currentTimeBlock()
+  const weeklyStreaks = useWeeklyStreaks({
+    getDayTotals,
+    getLogByDate,
+    loading: nutritionLoading || workoutLoading,
+  })
 
-  const getLoggedName = (slotId: string): string | undefined => {
-    const mealId = SLOT_TO_MEAL_ID[slotId] ?? slotId
-    const meal = dayData.meals.find((m) => m.id === mealId)
-    const count = meal?.foods.length ?? 0
-    if (count === 0) return undefined
-    const first = meal!.foods[0].name
-    return count > 1 ? `${first} +${count - 1} more` : first
-  }
+  const todayMeals = getByDate(today)
+  const loggedMealIds = new Set(todayMeals.meals.filter((m) => m.foods.length > 0).map((m) => m.id))
+  const nextUnloggedMeal = todayMeals.meals.find((meal) => meal.foods.length === 0)
+  const dueReminders = getDueReminders(loggedMealIds)
 
-  const workoutStreak = (() => {
-    let s = 0
-    const d = new Date()
-    while (true) {
-      const key = d.toISOString().split('T')[0]
-      if (completedDates.includes(key)) { s++; d.setDate(d.getDate() - 1) } else break
-    }
-    return s
-  })()
-
-  const lastWeightDate = metrics.weightLog.at(-1)?.date
+  const lastWeightDate = metrics.weightLog[metrics.weightLog.length - 1]?.date
   const daysSinceWeight = lastWeightDate
     ? Math.floor((Date.now() - new Date(lastWeightDate + 'T12:00:00').getTime()) / 86400000)
     : 999
@@ -111,36 +163,22 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
     setWeightInput('')
   }
 
-  const handleLogMeal = (slot: { id: string }, preset: MealPreset) => {
-    const mealId = SLOT_TO_MEAL_ID[slot.id] ?? 'snacks'
-    const food: FoodItem = {
-      id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
-      name: preset.name, calories: preset.calories,
-      protein: preset.protein, carbs: preset.carbs, fat: preset.fat,
-    }
-    addFood(today, mealId, food)
-  }
-
-  const toggleEventCheck = (id: string) => {
-    setCheckedEventIds((prev) =>
-      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
-    )
-  }
-
   const dateStr = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric' })
   const dayName = new Date().toLocaleDateString('en-US', { weekday: 'long' })
-  const daysToGoal = daysUntil(DEFAULT_USER_PROFILE.goalDate)
-  const lbsToGoal = Math.max(0, latestWeight - DEFAULT_USER_PROFILE.goalWeightLbs)
-
-  const calPct = Math.min(100, (totals.calories / NUTRITION_TARGETS.calories) * 100)
-  const proteinPct = Math.min(100, (totals.protein / NUTRITION_TARGETS.protein) * 100)
-
-  // Free window insight from calendar intelligence
-  const freeSlots = gcal.isConnected ? gcal.getFreeSlots() : []
-  const freeSlotLabel = freeSlots[0]?.label
+  const lbsToGoal = Math.max(0, (latestWeight || 0) - DEFAULT_USER_PROFILE.goalWeightLbs)
 
   return (
-    <div className="px-4 pt-4 pb-24 max-w-lg mx-auto space-y-4">
+    <div ref={containerRef} className="px-4 pt-4 pb-24 max-w-lg mx-auto space-y-4">
+
+      {/* Pull-to-refresh indicator */}
+      {indicator !== 0 && (
+        <div
+          className="flex items-center justify-center overflow-hidden transition-all duration-150"
+          style={{ height: indicator === -1 ? 40 : indicator }}
+        >
+          <div className={`w-5 h-5 rounded-full border-2 border-accent border-t-transparent ${indicator === -1 ? 'animate-spin' : 'opacity-60'}`} />
+        </div>
+      )}
 
       {/* Header */}
       <div className="flex items-start justify-between pt-2">
@@ -148,26 +186,29 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
           <p className="text-slate-500 text-sm">{dayName}, {dateStr}</p>
           <h1 className="text-2xl font-bold text-gradient mt-0.5">{getGreeting()}, Luke</h1>
           <p className="text-xs text-slate-600 mt-1">
-            <span className="text-slate-400">{latestWeight} lbs</span>
-            {lbsToGoal > 0
-              ? <> · <span className="text-slate-400">{lbsToGoal} lbs</span> to goal · <span className="text-slate-400">{daysToGoal}d</span> left</>
-              : <span className="text-success"> · Goal reached 🎉</span>}
+            Week {week} · {phase.label}
           </p>
+          {(latestWeight || 0) > 0 && (
+            <p className="text-xs text-slate-600 mt-0.5">
+              <span className="text-slate-400">{latestWeight} lbs</span>
+              {lbsToGoal > 0
+                ? <> · <span className="text-slate-400">{lbsToGoal} lbs to goal</span></>
+                : <span className="text-success"> · Goal reached</span>}
+            </p>
+          )}
         </div>
-        {onOpenSettings && (
-          <button onClick={onOpenSettings} className="p-2 rounded-xl bg-surface-800 text-slate-600 hover:text-slate-300 mt-1 transition-colors">
-            <Cog6ToothIcon className="w-5 h-5" />
-          </button>
-        )}
       </div>
 
-      <p className="text-xs text-slate-600 -mt-2">
-        Week {week} · {phase.label} phase
-        {workoutStreak > 0 && <span className="text-warn animate-streak-fire inline-block ml-2">🔥 {workoutStreak}-day streak</span>}
-        {streak > 0 && <span className="text-success ml-2">✦ {streak}-day habit streak</span>}
-      </p>
+      <WeeklyStreakCard
+        lanes={weeklyStreaks.lanes}
+        focusLane={weeklyStreaks.focusLane}
+        score={weeklyStreaks.score}
+        maxScore={weeklyStreaks.maxScore}
+        countdown={weeklyStreaks.countdown}
+        loading={weeklyStreaks.loading}
+      />
 
-      {/* Weight check-in */}
+      {/* Weekly weigh-in */}
       {showWeightPrompt && (
         <div className="bg-surface-800 rounded-2xl px-4 py-3 space-y-2">
           <div className="flex items-center justify-between">
@@ -175,7 +216,10 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
               <ScaleIcon className="w-4 h-4 text-accent" />
               <p className="text-sm font-semibold text-slate-200">Weekly weigh-in</p>
             </div>
-            <button onClick={() => localStorage.setItem('weight_prompt_snoozed', today)} className="text-slate-600 hover:text-slate-400">
+            <button
+              onClick={() => localStorage.setItem('weight_prompt_snoozed', today)}
+              className="text-slate-600 hover:text-slate-400"
+            >
               <XMarkIcon className="w-4 h-4" />
             </button>
           </div>
@@ -183,62 +227,106 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
             {daysSinceWeight >= 999 ? 'No weight logged yet.' : `Last logged ${daysSinceWeight} days ago.`}
           </p>
           <div className="flex gap-2">
-            <input type="number" step="0.1" min="100" max="400" value={weightInput}
+            <input
+              type="number" inputMode="decimal" step="0.1" min="100" max="400"
+              value={weightInput}
               onChange={(e) => setWeightInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleWeightLog()}
-              placeholder={latestWeight ? String(latestWeight) : '193.0'}
-              className="flex-1 bg-surface-700 border border-surface-600 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-accent" />
+              placeholder={latestWeight ? String(latestWeight) : '190.0'}
+              className="flex-1 bg-surface-700 border border-surface-600 rounded-xl px-3 py-2 text-sm text-slate-100 focus:outline-none focus:border-accent"
+            />
             <span className="flex items-center text-xs text-slate-500">lbs</span>
-            <button onClick={handleWeightLog} disabled={!weightInput}
-              className="px-4 py-2 rounded-xl bg-accent text-white text-sm font-semibold disabled:opacity-40">Log</button>
+            <button
+              onClick={handleWeightLog}
+              disabled={!weightInput}
+              className="px-4 py-2 rounded-xl bg-accent text-white text-sm font-semibold disabled:opacity-40"
+            >
+              Log
+            </button>
           </div>
         </div>
       )}
 
-      {/* Google Calendar */}
-      {!gcal.isConnected ? (
-        <button
-          onClick={gcal.connect}
-          className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-dashed border-surface-600 text-slate-500 hover:text-slate-300 hover:border-accent/40 transition-colors"
-        >
-          <CalendarDaysIcon className="w-4 h-4" />
-          <span className="text-sm">Connect Google Calendar</span>
-        </button>
-      ) : (
-        <div className="flex items-center justify-between px-1">
+      {/* Nutrition Today */}
+      <div className="bg-surface-800 rounded-2xl px-4 py-3 space-y-2">
+        <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-1.5">
-            <CalendarDaysIcon className="w-3.5 h-3.5 text-accent" />
-            <span className="text-[10px] text-accent font-medium uppercase tracking-wide">Calendar synced</span>
-            {gcal.loading && <span className="text-[10px] text-slate-600">loading…</span>}
-            {gcal.error && <span className="text-[10px] text-danger">{gcal.error}</span>}
+            <FireIcon className="w-3.5 h-3.5 text-accent" />
+            <p className="text-[10px] uppercase tracking-widest font-semibold text-accent">Nutrition</p>
           </div>
-          <button onClick={() => gcal.refresh()} className="text-slate-700 hover:text-slate-400">
-            <ArrowPathIcon className="w-3.5 h-3.5" />
+          <button onClick={() => navigate('/nutrition')} className="text-xs text-accent font-semibold">
+            {nextUnloggedMeal ? `Log ${nextUnloggedMeal.name} →` : 'View log'}
           </button>
         </div>
-      )}
 
-      {/* Day Plan — calendar events + habits in time blocks */}
-      <DayPlan
-        habits={todayHabits}
-        isHabitDone={isHabitDone}
-        toggleHabit={toggleHabit}
-        majorTask={majorTask}
-        setMajorTask={setMajorTask}
-        calendarEvents={gcal.events}
-        checkedEventIds={checkedEventIds}
-        onToggleEvent={toggleEventCheck}
-        freeSlotLabel={freeSlotLabel}
-      />
+        <NutritionSummary totals={totals} targets={NUTRITION_TARGETS} title="Today's Targets" embedded />
 
-      {/* Body stats strip */}
-      <div className="bg-surface-800 rounded-2xl px-4 py-3 space-y-3">
+        <div className="grid grid-cols-2 gap-2 pt-1">
+          {todayMeals.meals.map((meal) => {
+            const isLogged = meal.foods.length > 0
+            const calories = meal.foods.reduce((sum, food) => sum + food.calories, 0)
+
+            return (
+              <div
+                key={meal.id}
+                className={`flex items-center gap-2 rounded-xl border px-3 py-2 ${
+                  isLogged
+                    ? 'bg-success/10 border-success/25'
+                    : 'bg-surface-700 border-surface-600'
+                }`}
+              >
+                {isLogged
+                  ? <CheckCircleSolid className="w-4 h-4 text-success shrink-0" />
+                  : <CheckCircleIcon className="w-4 h-4 text-slate-600 shrink-0" />
+                }
+                <div className="min-w-0 flex-1">
+                  <p className={`text-xs font-semibold truncate ${isLogged ? 'text-slate-400 line-through' : 'text-slate-300'}`}>
+                    {meal.name}
+                  </p>
+                  <p className={`text-[10px] truncate ${isLogged ? 'text-success/75' : 'text-slate-600'}`}>
+                    {isLogged ? `Logged · ${Math.round(calories)} kcal` : 'Not logged'}
+                  </p>
+                </div>
+                {!isLogged && (
+                  <button
+                    onClick={() => navigate('/nutrition')}
+                    className="text-[10px] font-semibold text-accent"
+                  >
+                    Log
+                  </button>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Meal reminder banners */}
+      {dueReminders.map((r) => (
+        <div key={r.mealId} className="flex items-center gap-3 bg-surface-800 rounded-2xl px-4 py-3 border border-accent/20">
+          <BellIcon className="w-4 h-4 text-accent shrink-0" />
+          <p className="text-sm text-slate-300 flex-1">Time to log <span className="font-semibold text-slate-100">{r.label}</span></p>
+          <button onClick={() => navigate('/nutrition')} className="text-xs font-semibold text-accent">
+            Log →
+          </button>
+        </div>
+      ))}
+
+      {/* Today's Workout */}
+      <div className="bg-surface-800 rounded-2xl px-4 py-3 space-y-2">
+        <div className="flex items-center gap-1.5 mb-1">
+          <BoltIcon className="w-3.5 h-3.5 text-accent" />
+          <p className="text-[10px] uppercase tracking-widest font-semibold text-accent">Today's Workout</p>
+        </div>
+
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-[10px] text-slate-500 uppercase tracking-wide">Workout</p>
-            <p className="text-sm font-semibold text-slate-200 mt-0.5">
-              {todayWorkout.isRest ? '😴 Rest day' : todayWorkout.label}
+            <p className="text-base font-semibold text-slate-100">
+              {todayWorkout.isRest ? '😴 Rest Day' : todayWorkout.label}
             </p>
+            {!todayWorkout.isRest && todayWorkout.focusLabel && (
+              <p className="text-xs text-slate-500 mt-0.5">{todayWorkout.focusLabel}</p>
+            )}
           </div>
           {!todayWorkout.isRest && (
             todayLog?.completedAt
@@ -247,53 +335,49 @@ export default function TodayPage({ onOpenSettings }: TodayPageProps) {
           )}
         </div>
 
-        <div className="space-y-1.5 border-t border-surface-700 pt-3">
-          <div className="flex items-center justify-between">
-            <p className="text-[10px] text-slate-500 uppercase tracking-wide">Nutrition</p>
-            <button onClick={() => navigate('/nutrition')} className="text-xs text-accent font-semibold">Log →</button>
-          </div>
-          {[
-            { label: 'Calories', pct: calPct,     val: `${totals.calories} / ${NUTRITION_TARGETS.calories}`,         color: 'bg-accent' },
-            { label: 'Protein',  pct: proteinPct, val: `${totals.protein}g / ${NUTRITION_TARGETS.protein}g`, color: 'bg-blue-400' },
-          ].map(({ label, pct, val, color }) => (
-            <div key={label} className="flex items-center gap-2">
-              <span className="text-[10px] text-slate-600 w-14">{label}</span>
-              <div className="flex-1 h-1 bg-surface-700 rounded-full overflow-hidden">
-                <div className={`h-full ${color} rounded-full transition-all`} style={{ width: `${pct}%` }} />
-              </div>
-              <span className="text-[10px] text-slate-500 w-24 text-right">{val}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Daily Protocol (supplements) */}
-      <div className="bg-surface-800 rounded-2xl overflow-hidden">
-        <button onClick={() => setSupplementsOpen((p) => !p)}
-          className="w-full flex items-center justify-between px-4 py-3 text-left">
-          <p className="text-[10px] uppercase tracking-widest font-semibold text-slate-500">Daily Protocol</p>
-          {supplementsOpen ? <ChevronUpIcon className="w-4 h-4 text-slate-600" /> : <ChevronDownIcon className="w-4 h-4 text-slate-600" />}
-        </button>
-        {supplementsOpen && (
-          <div className="px-4 pb-3 space-y-3">
-            <AgendaBlock label="Morning" timeRange="Rise – 12 PM" defaultExpanded={block === 'morning'}
-              supplements={[...MORNING_SUPPLEMENTS, ...(todayWorkout.isRest ? [] : PRE_WORKOUT_SUPPLEMENTS)]}
-              mealSlots={[{ id: 'breakfast', label: 'Breakfast', category: 'breakfast', loggedName: getLoggedName('breakfast') }]}
-              isChecked={isChecked} onToggle={toggleItem} onCheckAll={checkAll}
-              onLogMeal={handleLogMeal} onCustomMeal={() => navigate('/nutrition')} />
-            <AgendaBlock label="Afternoon" timeRange="12 PM – 6 PM" defaultExpanded={block === 'afternoon'}
-              supplements={[...(todayWorkout.isRest ? [] : POST_WORKOUT_SUPPLEMENTS), ...AFTERNOON_SUPPLEMENTS]}
-              mealSlots={[{ id: 'lunch', label: 'Lunch', category: 'lunch', loggedName: getLoggedName('lunch') }, { id: 'snack', label: 'Snack', category: 'snack', optional: true, loggedName: getLoggedName('snack') }]}
-              isChecked={isChecked} onToggle={toggleItem} onCheckAll={checkAll}
-              onLogMeal={handleLogMeal} onCustomMeal={() => navigate('/nutrition')} />
-            <AgendaBlock label="Evening" timeRange="6 PM – Sleep" defaultExpanded={block === 'evening'}
-              supplements={EVENING_SUPPLEMENTS}
-              mealSlots={[{ id: 'dinner', label: 'Dinner', category: 'dinner', loggedName: getLoggedName('dinner') }, { id: 'dessert', label: 'Dessert', category: 'dessert', optional: true, loggedName: getLoggedName('dessert') }]}
-              isChecked={isChecked} onToggle={toggleItem} onCheckAll={checkAll}
-              onLogMeal={handleLogMeal} onCustomMeal={() => navigate('/nutrition')} />
+        {todayLog && !todayLog.completedAt && (
+          <div className="bg-surface-700 rounded-xl px-3 py-2">
+            <p className="text-xs text-slate-400">
+              {todayLog.exercises.reduce((s, e) => s + e.sets.filter(set => set.completed).length, 0)}
+              {' / '}
+              {todayLog.exercises.reduce((s, e) => s + e.sets.length, 0)} sets completed
+            </p>
           </div>
         )}
       </div>
+
+      {/* Supplement timing */}
+      <SupplementCard date={today} />
+
+      {/* Oura Recovery */}
+      {settingsLoading ? (
+        <div className="bg-surface-800 rounded-2xl px-4 py-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded-full bg-surface-700 animate-pulse" />
+            <div className="h-3 w-20 bg-surface-700 rounded animate-pulse" />
+          </div>
+          <div className="h-16 bg-surface-700 rounded-xl animate-pulse" />
+          <div className="grid grid-cols-2 gap-2">
+            <div className="h-24 bg-surface-700 rounded-xl animate-pulse" />
+            <div className="h-24 bg-surface-700 rounded-xl animate-pulse" />
+          </div>
+        </div>
+      ) : settings.ouraToken ? (
+        <OuraCard token={settings.ouraToken} />
+      ) : (
+        <button
+          onClick={onOpenSettings}
+          className="w-full flex items-center gap-3 bg-surface-800 rounded-2xl px-4 py-4 text-left border border-dashed border-surface-600 hover:border-accent/50 transition-colors"
+        >
+          <HeartIcon className="w-5 h-5 text-danger shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-slate-300">Connect Oura Ring</p>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Get recovery scores, HRV, sleep quality, and daily training recommendations
+            </p>
+          </div>
+        </button>
+      )}
 
     </div>
   )
